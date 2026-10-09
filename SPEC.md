@@ -146,7 +146,9 @@ IChatClient chat = llm.AsChatClient();
 services.AddEmberLlm(o => o.BaseUrl = "http://localhost:1234");
 ```
 
-Constructors: `EmberLlmClient(string baseUrl)`, `EmberLlmClient(DiscoveredServer server)`, and `EmberLlmClient(HttpClient httpClient, EmberLlmOptions options)`. `EmberLlmDiscovery.FindAsync` has an overload that accepts an `HttpClient`.
+Constructors: `EmberLlmClient(string baseUrl)`, `EmberLlmClient(EmberLlmOptions options)`, `EmberLlmClient(DiscoveredServer server)`, and `EmberLlmClient(HttpClient httpClient, EmberLlmOptions options)`. The options-only overload lets callers set `DefaultModel` or `RequestTimeout` without supplying an `HttpClient`.
+
+Exceptions (see `docs/decisions/0003-exception-model.md`): all derive from `EmberLlmException`. `EmberLlmHttpException` (non-success status, with `StatusCode`, `ServerMessage`, `ResponseBody`), `EmberLlmConnectionException` (server unreachable), `EmberLlmTimeoutException`, `NoModelAvailableException`, and `StructuredOutputException` (milestone 6). Caller cancellation throws `OperationCanceledException` with the caller's token. `EmberLlmDiscovery.FindAsync` has an overload that accepts an `HttpClient`.
 
 ### Model selection
 

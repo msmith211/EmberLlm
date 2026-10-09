@@ -5,7 +5,12 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
-  <!-- Test-only packages. Runtime dependencies are added in the milestone that first uses them (see SPEC.md). -->
+  <!-- Runtime dependencies (the allowed list is in SPEC.md; each is added in the milestone that first uses it) -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
+  </ItemGroup>
+
+  <!-- Test-only packages -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
