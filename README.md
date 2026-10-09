@@ -2,8 +2,7 @@
 
 **Make local LLM servers feel native in C#. Find running servers, stream chat, and get typed, validated objects back from small models.**
 
-<!-- Badge placeholders: replace OWNER/REPO once the GitHub repo exists. -->
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/msmith211/LocalLlm/actions/workflows/ci.yml/badge.svg)](https://github.com/msmith211/LocalLlm/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/LocalLlm.svg)](https://www.nuget.org/packages/LocalLlm)
 [![Coverage](https://img.shields.io/badge/coverage-pending-lightgrey.svg)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
