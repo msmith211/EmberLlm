@@ -1,0 +1,116 @@
+name: Bug report
+description: Report something in LocalLlm that doesn't work as expected.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug in LocalLlm.
+
+        Before you file it, please search the existing issues to see if it has already been reported.
+
+        This template is for bugs. If you want a feature that is outside the v0.1 scope (for example tool calling, loading or unloading models, or embeddings), please open an issue to discuss it before you send a pull request.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug. Include any exception type and message you got.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest C# snippet that shows the problem. It is formatted as C# automatically, so no code fences are needed.
+      placeholder: |
+        var llm = new LocalLlmClient("http://localhost:1234");
+        var answer = await llm.CompleteAsync("Hello");
+      render: csharp
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      description: Which server were you talking to?
+      options:
+        - LM Studio
+        - Ollama
+        - llama.cpp server
+        - vLLM
+        - Other / Generic OpenAI-compatible
+    validations:
+      required: true
+
+  - type: input
+    id: backend-version
+    attributes:
+      label: Backend version
+      description: For "Other", please also name the server.
+      placeholder: e.g. LM Studio 0.3.x, Ollama 0.x.y, llama.cpp build bNNNN
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and quantization
+      placeholder: e.g. qwen3-14b Q4_K_M
+    validations:
+      required: true
+
+  - type: input
+    id: library-version
+    attributes:
+      label: LocalLlm version
+      description: The NuGet package version, or the commit hash if you built from source.
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: .NET version and OS
+      description: The output of `dotnet --version` and your operating system.
+      placeholder: e.g. .NET 10.0.100 on Windows 11
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature-area
+    attributes:
+      label: Feature area
+      options:
+        - Chat
+        - Streaming
+        - Model listing
+        - Discovery
+        - Structured output (GetAsync<T>)
+        - IChatClient / DI
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or raw server response
+      description: |
+        Paste any relevant logs, stack traces, or the raw HTTP response from the server. A raw server response is especially useful: backend quirks are tested from recorded fixtures, so it can often be turned straight into a test.
+        Please remove any API keys or private data first. This is formatted as a code block automatically, so no code fences are needed.
+      render: shell
+    validations:
+      required: false
