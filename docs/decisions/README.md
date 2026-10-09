@@ -5,6 +5,8 @@ Short records of significant design choices: what was decided, why, and what els
 | # | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-reuse-microsoft-extensions-ai-types.md) | Reuse Microsoft.Extensions.AI types for messages and responses | Accepted |
+| [0002](0002-model-selection-order.md) | Resolve the model from request, then default, then the server's first listed model | Accepted |
+| [0003](0003-exception-model.md) | Separate exception types for HTTP errors, unreachable servers, timeouts and cancellation | Accepted |
 
 ## Writing a new note
 
