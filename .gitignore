@@ -1,0 +1,42 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+*.nupkg
+*.snupkg
+
+# Test results and coverage
+[Tt]est[Rr]esult*/
+coverage/
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# IDEs and editors
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code (private working notes and local settings)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Local settings and secrets
+.env
+*.env.local
+appsettings.Development.json

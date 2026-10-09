@@ -1,0 +1,16 @@
+# Normalize text files to LF in the repo and working tree, so Linux and Windows CI see identical files
+* text=auto eol=lf
+
+# Windows-only formats keep CRLF
+*.sln  text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary files
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.ico   binary
+*.snk   binary
+*.nupkg binary
