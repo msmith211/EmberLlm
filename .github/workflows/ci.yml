@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore EmberLlm.slnx
+
+      - name: Build
+        run: dotnet build EmberLlm.slnx -c Release --no-restore
+
+      # Integration tests skip themselves unless EMBERLLM_TEST_URL is set, which CI never does
+      - name: Test
+        run: dotnet test --solution EmberLlm.slnx -c Release --no-build
+
+      - name: Coverage
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet test --project tests/EmberLlm.Tests -c Release --no-build --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: TestResults/coverage.cobertura.xml
+          if-no-files-found: error

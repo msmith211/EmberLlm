@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- Central package management: every package version lives here, project files reference packages without versions -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!-- Test-only packages. Runtime dependencies are added in the milestone that first uses them (see SPEC.md). -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+
+</Project>

@@ -30,13 +30,13 @@ Tests in `tests/EmberLlm.IntegrationTests/` hit a real local server. They are sk
 
 ```sh
 # bash
-EMBERLLM_TEST_URL=http://localhost:1234 dotnet test tests/EmberLlm.IntegrationTests
+EMBERLLM_TEST_URL=http://localhost:1234 dotnet test --project tests/EmberLlm.IntegrationTests
 ```
 
 ```powershell
 # PowerShell
 $env:EMBERLLM_TEST_URL = "http://localhost:1234"
-dotnet test tests/EmberLlm.IntegrationTests
+dotnet test --project tests/EmberLlm.IntegrationTests
 ```
 
 Integration tests don't run in CI, so mention in your pull request which backend you ran them against, if any.
