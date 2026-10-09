@@ -1,6 +1,6 @@
-# Contributing to LocalLlm
+# Contributing to EmberLlm
 
-Thanks for your interest in LocalLlm. Bug reports, fixture recordings from real backends, and small focused pull requests are all welcome. This page covers what you need to build, test and send a change.
+Thanks for your interest in EmberLlm. Bug reports, fixture recordings from real backends, and small focused pull requests are all welcome. This page covers what you need to build, test and send a change.
 
 ## Scope
 
@@ -22,21 +22,21 @@ dotnet build
 dotnet test
 ```
 
-Unit tests (`tests/LocalLlm.Tests/`) need no server. They use a fake `HttpMessageHandler` that replays recorded responses, so they run anywhere. CI runs the build and unit tests on Linux and Windows for every push and pull request.
+Unit tests (`tests/EmberLlm.Tests/`) need no server. They use a fake `HttpMessageHandler` that replays recorded responses, so they run anywhere. CI runs the build and unit tests on Linux and Windows for every push and pull request.
 
 ### Integration tests (opt-in)
 
-Tests in `tests/LocalLlm.IntegrationTests/` hit a real local server. They are skipped unless the `LOCALLLM_TEST_URL` environment variable points at one. Load the smallest model you have so they run quickly.
+Tests in `tests/EmberLlm.IntegrationTests/` hit a real local server. They are skipped unless the `EMBERLLM_TEST_URL` environment variable points at one. Load the smallest model you have so they run quickly.
 
 ```sh
 # bash
-LOCALLLM_TEST_URL=http://localhost:1234 dotnet test tests/LocalLlm.IntegrationTests
+EMBERLLM_TEST_URL=http://localhost:1234 dotnet test tests/EmberLlm.IntegrationTests
 ```
 
 ```powershell
 # PowerShell
-$env:LOCALLLM_TEST_URL = "http://localhost:1234"
-dotnet test tests/LocalLlm.IntegrationTests
+$env:EMBERLLM_TEST_URL = "http://localhost:1234"
+dotnet test tests/EmberLlm.IntegrationTests
 ```
 
 Integration tests don't run in CI, so mention in your pull request which backend you ran them against, if any.
@@ -47,7 +47,7 @@ Backend quirks are tested from real responses stored under `tests/fixtures/<back
 
 1. Capture the actual response from the backend (for example with `curl` against its `/v1` endpoint). Don't hand-write or "tidy" it; the quirk is the point.
 2. Save it under `tests/fixtures/<backend>/`.
-3. Add a unit test in `tests/LocalLlm.Tests/` that replays the fixture through the fake HTTP handler and asserts the behavior you expect.
+3. Add a unit test in `tests/EmberLlm.Tests/` that replays the fixture through the fake HTTP handler and asserts the behavior you expect.
 4. Note the backend name and version in the pull request.
 
 If you're not sure what the backend is supposed to do, write the fixture test, mark it skipped with the reason, and raise the question in the pull request or an issue. Please don't commit failing tests.

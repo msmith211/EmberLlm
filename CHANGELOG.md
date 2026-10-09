@@ -8,4 +8,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing released yet. v0.1.0 is in development; see [ROADMAP.md](ROADMAP.md).
 
-[Unreleased]: https://github.com/msmith211/LocalLlm/commits/main
+[Unreleased]: https://github.com/msmith211/EmberLlm/commits/main

@@ -1,12 +1,12 @@
 name: Bug report
-description: Report something in LocalLlm that doesn't work as expected.
+description: Report something in EmberLlm that doesn't work as expected.
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug in LocalLlm.
+        Thanks for taking the time to report a bug in EmberLlm.
 
         Before you file it, please search the existing issues to see if it has already been reported.
 
@@ -34,7 +34,7 @@ body:
       label: Minimal reproduction
       description: The smallest C# snippet that shows the problem. It is formatted as C# automatically, so no code fences are needed.
       placeholder: |
-        var llm = new LocalLlmClient("http://localhost:1234");
+        var llm = new EmberLlmClient("http://localhost:1234");
         var answer = await llm.CompleteAsync("Hello");
       render: csharp
     validations:
@@ -74,7 +74,7 @@ body:
   - type: input
     id: library-version
     attributes:
-      label: LocalLlm version
+      label: EmberLlm version
       description: The NuGet package version, or the commit hash if you built from source.
       placeholder: e.g. 0.1.0
     validations:

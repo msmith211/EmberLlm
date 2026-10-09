@@ -1,6 +1,6 @@
 # Roadmap
 
-LocalLlm aims to stay small and focused on what is specific to local inference. This page lists what is planned, what is being considered, and what is deliberately out of scope. Nothing here has a date; versions ship when they are ready.
+EmberLlm aims to stay small and focused on what is specific to local inference. This page lists what is planned, what is being considered, and what is deliberately out of scope. Nothing here has a date; versions ship when they are ready.
 
 Have an idea? Open an issue to discuss it before sending a pull request.
 
@@ -10,7 +10,7 @@ Have an idea? Open an issue to discuss it before sending a pull request.
 - Model listing from `/v1/models`
 - Server discovery with backend fingerprinting (LM Studio, Ollama, llama.cpp server, vLLM, generic OpenAI-compatible)
 - Typed structured output with `GetAsync<T>()`, output cleanup and corrective retries
-- `IChatClient` adapter and `AddLocalLlm()` dependency injection
+- `IChatClient` adapter and `AddEmberLlm()` dependency injection
 
 See [SPEC.md](SPEC.md) for the full v0.1 design and build order.
 
@@ -34,6 +34,6 @@ Ideas that may land later, depending on demand:
 
 These are not planned. Other libraries already cover them, or they don't fit a client for local servers.
 
-- **Running models in-process** (llama.cpp bindings). LocalLlm only talks to servers.
+- **Running models in-process** (llama.cpp bindings). EmberLlm only talks to servers.
 - **Cloud providers** (OpenAI, Anthropic and others). Use their official SDKs, most of which plug into Microsoft.Extensions.AI as well.
 - **Embeddings, images and audio** are not planned for now. Open an issue if you have a strong use case.
