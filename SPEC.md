@@ -75,7 +75,10 @@ EmberLlm/
 ├── .github/workflows/ci.yml
 ├── ROADMAP.md
 ├── README.md
-└── EmberLlm.sln
+├── global.json                  # SDK version, Microsoft.Testing.Platform test runner
+├── Directory.Build.props        # shared build settings
+├── Directory.Packages.props     # central package versions
+└── EmberLlm.slnx
 ```
 
 ## Type naming
