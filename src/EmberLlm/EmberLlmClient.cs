@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -99,25 +100,57 @@ public sealed class EmberLlmClient : IDisposable
     /// <exception cref="NoModelAvailableException">No model was specified and the server lists none.</exception>
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (request.Messages is null || request.Messages.Count == 0)
-        {
-            throw new ArgumentException("A chat request needs at least one message.", nameof(request));
-        }
-
+        ValidateChatRequest(request);
         cancellationToken.ThrowIfCancellationRequested();
 
         var model = await ResolveModelAsync(request.Model, cancellationToken).ConfigureAwait(false);
-        var body = JsonSerializer.Serialize(ChatMapper.ToWire(request, model, stream: false), WireJsonContext.Default.WireChatRequest);
-
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _chatCompletionsUri)
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
-        };
+        using var httpRequest = CreateChatRequestMessage(request, model, stream: false);
 
         var wire = await SendAsync(httpRequest, WireJsonContext.Default.WireChatResponse, cancellationToken).ConfigureAwait(false);
         return ChatMapper.ToChatResponse(wire);
+    }
+
+    /// <summary>
+    /// Sends a single user prompt and streams the reply text as it is generated.
+    /// </summary>
+    /// <param name="prompt">The user message.</param>
+    /// <param name="cancellationToken">Cancels the request, including mid-stream.</param>
+    /// <returns>The reply text, one fragment (usually one token) at a time. Reasoning from thinking models is not included.</returns>
+    public IAsyncEnumerable<string> StreamAsync(string prompt, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+        return StreamAsync(new ChatRequest { Messages = [new(ChatRole.User, prompt)] }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends a chat request and streams the reply text as it is generated.
+    /// </summary>
+    /// <param name="request">The request. Must contain at least one message.</param>
+    /// <param name="cancellationToken">Cancels the request, including mid-stream.</param>
+    /// <returns>The reply text, one fragment (usually one token) at a time. Reasoning from thinking models is not included.</returns>
+    public IAsyncEnumerable<string> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    {
+        ValidateChatRequest(request);
+        return StreamTextCoreAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends a chat request and streams rich updates: text, reasoning from thinking models, the finish
+    /// reason, and token usage in the final update. Use Microsoft.Extensions.AI's
+    /// <c>ToChatResponse()</c> to combine the updates into a single <see cref="ChatResponse"/>.
+    /// </summary>
+    /// <param name="request">The request. Must contain at least one message.</param>
+    /// <param name="cancellationToken">Cancels the request, including mid-stream.</param>
+    /// <returns>One update per chunk the server sends.</returns>
+    /// <exception cref="EmberLlmHttpException">The server returned a non-success status code.</exception>
+    /// <exception cref="EmberLlmConnectionException">The server could not be reached, or the connection dropped mid-stream.</exception>
+    /// <exception cref="EmberLlmTimeoutException">The stream exceeded <see cref="EmberLlmOptions.RequestTimeout"/>.</exception>
+    /// <exception cref="EmberLlmException">The server reported an error mid-stream or sent an invalid chunk.</exception>
+    public IAsyncEnumerable<ChatResponseUpdate> StreamUpdatesAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    {
+        // Validation runs here, not in the iterator, so bad arguments throw at the call site
+        ValidateChatRequest(request);
+        return StreamUpdatesCoreAsync(request, cancellationToken);
     }
 
     /// <summary>
@@ -182,13 +215,112 @@ public sealed class EmberLlmClient : IDisposable
         }
     }
 
+    private async IAsyncEnumerable<string> StreamTextCoreAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await foreach (var update in StreamUpdatesCoreAsync(request, cancellationToken).ConfigureAwait(false))
+        {
+            if (update.Text is { Length: > 0 } text)
+            {
+                yield return text;
+            }
+        }
+    }
+
+    private async IAsyncEnumerable<ChatResponseUpdate> StreamUpdatesCoreAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var model = await ResolveModelAsync(request.Model, cancellationToken).ConfigureAwait(false);
+        using var httpRequest = CreateChatRequestMessage(request, model, stream: true);
+
+        // RequestTimeout bounds the whole stream, not just the wait for the first byte
+        using var timeoutSource = CreateTimeoutSource(cancellationToken);
+        var (response, stream) = await OpenStreamAsync(httpRequest, timeoutSource.Token, cancellationToken).ConfigureAwait(false);
+        using var responseScope = response;
+        await using var streamScope = stream.ConfigureAwait(false);
+
+        var events = SseReader.ReadDataAsync(stream, timeoutSource.Token).GetAsyncEnumerator(timeoutSource.Token);
+        await using var eventsScope = events.ConfigureAwait(false);
+
+        while (true)
+        {
+            // C# can't yield inside a try with a catch, so each read is wrapped on its own
+            string data;
+            try
+            {
+                if (!await events.MoveNextAsync().ConfigureAwait(false))
+                {
+                    yield break;
+                }
+
+                data = events.Current;
+            }
+            catch (Exception ex) when (TranslateFailure(ex, httpRequest, cancellationToken) is { } translated)
+            {
+                throw translated;
+            }
+
+            yield return ChatMapper.ToUpdate(ParseChunk(data, httpRequest));
+        }
+    }
+
+    private async Task<(HttpResponseMessage Response, Stream Stream)> OpenStreamAsync(HttpRequestMessage request, CancellationToken linkedToken, CancellationToken callerToken)
+    {
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(linkedToken).ConfigureAwait(false);
+                throw CreateHttpException(request, response.StatusCode, body);
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync(linkedToken).ConfigureAwait(false);
+            return (response, stream);
+        }
+        catch (Exception ex)
+        {
+            response?.Dispose();
+            if (TranslateFailure(ex, request, callerToken) is { } translated)
+            {
+                throw translated;
+            }
+
+            throw;
+        }
+    }
+
+    private static WireChatResponse ParseChunk(string data, HttpRequestMessage request)
+    {
+        WireChatResponse? chunk;
+        try
+        {
+            chunk = JsonSerializer.Deserialize(data, WireJsonContext.Default.WireChatResponse);
+        }
+        catch (JsonException ex)
+        {
+            throw new EmberLlmException($"{request.Method} {request.RequestUri} sent a stream chunk that is not valid JSON: {Truncate(data)}", ex);
+        }
+
+        if (chunk is null)
+        {
+            throw new EmberLlmException($"{request.Method} {request.RequestUri} sent an empty stream chunk.");
+        }
+
+        // Some servers report failures (such as running out of memory) as an error event mid-stream
+        if (chunk.ExtensionData?.ContainsKey("error") == true)
+        {
+            var message = ChatMapper.TryGetServerMessage(data) ?? Truncate(data);
+            throw new EmberLlmException($"{request.Method} {request.RequestUri} reported an error mid-stream: {message}");
+        }
+
+        return chunk;
+    }
+
     private async Task<T> SendAsync<T>(HttpRequestMessage request, JsonTypeInfo<T> responseType, CancellationToken cancellationToken)
     {
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (_requestTimeout != Timeout.InfiniteTimeSpan)
-        {
-            timeoutSource.CancelAfter(_requestTimeout);
-        }
+        using var timeoutSource = CreateTimeoutSource(cancellationToken);
 
         string body;
         try
@@ -201,19 +333,9 @@ public sealed class EmberLlmClient : IDisposable
                 throw CreateHttpException(request, response.StatusCode, body);
             }
         }
-        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (TranslateFailure(ex, request, cancellationToken) is { } translated)
         {
-            // Report the caller's own token, not the internal linked one
-            throw new OperationCanceledException(ex.Message, ex, cancellationToken);
-        }
-        catch (OperationCanceledException ex)
-        {
-            // Not the caller's token, so either RequestTimeout or the HttpClient's own Timeout fired
-            throw new EmberLlmTimeoutException($"{request.Method} {request.RequestUri} did not complete within the request timeout.", ex);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new EmberLlmConnectionException($"Could not reach the server at {request.RequestUri}: {ex.Message}", ex);
+            throw translated;
         }
 
         try
@@ -225,6 +347,60 @@ public sealed class EmberLlmClient : IDisposable
         {
             throw new EmberLlmException($"{request.Method} {request.RequestUri} returned a response that is not valid JSON: {Truncate(body)}", ex);
         }
+    }
+
+    /// <summary>
+    /// Maps transport failures to EmberLlm's exception model (see docs/decisions/0003-exception-model.md).
+    /// Returns <see langword="null"/> for exceptions that should propagate unchanged.
+    /// </summary>
+    private static Exception? TranslateFailure(Exception exception, HttpRequestMessage request, CancellationToken callerToken) => exception switch
+    {
+        // Report the caller's own token, not the internal linked one
+        OperationCanceledException canceled when callerToken.IsCancellationRequested =>
+            new OperationCanceledException(canceled.Message, canceled, callerToken),
+
+        // Not the caller's token, so either RequestTimeout or the HttpClient's own Timeout fired
+        OperationCanceledException canceled =>
+            new EmberLlmTimeoutException($"{request.Method} {request.RequestUri} did not complete within the request timeout.", canceled),
+
+        HttpRequestException failed =>
+            new EmberLlmConnectionException($"Could not reach the server at {request.RequestUri}: {failed.Message}", failed),
+
+        // The connection dropped after the response started, typically mid-stream
+        IOException failed =>
+            new EmberLlmConnectionException($"The connection to {request.RequestUri} was lost: {failed.Message}", failed),
+
+        _ => null,
+    };
+
+    private CancellationTokenSource CreateTimeoutSource(CancellationToken cancellationToken)
+    {
+        var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (_requestTimeout != Timeout.InfiniteTimeSpan)
+        {
+            source.CancelAfter(_requestTimeout);
+        }
+
+        return source;
+    }
+
+    private void ValidateChatRequest(ChatRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (request.Messages is null || request.Messages.Count == 0)
+        {
+            throw new ArgumentException("A chat request needs at least one message.", nameof(request));
+        }
+    }
+
+    private HttpRequestMessage CreateChatRequestMessage(ChatRequest request, string model, bool stream)
+    {
+        var body = JsonSerializer.Serialize(ChatMapper.ToWire(request, model, stream), WireJsonContext.Default.WireChatRequest);
+        return new HttpRequestMessage(HttpMethod.Post, _chatCompletionsUri)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
     }
 
     private static EmberLlmHttpException CreateHttpException(HttpRequestMessage request, System.Net.HttpStatusCode statusCode, string body)

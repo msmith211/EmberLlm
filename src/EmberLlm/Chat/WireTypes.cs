@@ -17,6 +17,14 @@ internal sealed class WireChatRequest
     public int? MaxTokens { get; init; }
 
     public bool Stream { get; init; }
+
+    public WireStreamOptions? StreamOptions { get; init; }
+}
+
+internal sealed class WireStreamOptions
+{
+    // Asks the server to send token usage in a final chunk
+    public bool IncludeUsage { get; init; }
 }
 
 internal sealed class WireMessage
@@ -29,6 +37,7 @@ internal sealed class WireMessage
     public string? ReasoningContent { get; init; }
 }
 
+// Used for both full responses and streaming chunks; chunks carry Delta instead of Message
 internal sealed class WireChatResponse
 {
     public string? Id { get; init; }
@@ -52,6 +61,8 @@ internal sealed class WireChoice
     public int Index { get; init; }
 
     public WireMessage? Message { get; init; }
+
+    public WireMessage? Delta { get; init; }
 
     public string? FinishReason { get; init; }
 }

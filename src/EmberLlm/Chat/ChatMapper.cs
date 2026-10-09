@@ -24,6 +24,42 @@ internal static class ChatMapper
             Temperature = request.Temperature,
             MaxTokens = request.MaxTokens,
             Stream = stream,
+            StreamOptions = stream ? new WireStreamOptions { IncludeUsage = true } : null,
+        };
+    }
+
+    public static ChatResponseUpdate ToUpdate(WireChatResponse chunk)
+    {
+        var choice = chunk.Choices?.FirstOrDefault();
+        var delta = choice?.Delta;
+
+        var contents = new List<AIContent>();
+        if (!string.IsNullOrEmpty(delta?.ReasoningContent))
+        {
+            contents.Add(new TextReasoningContent(delta.ReasoningContent));
+        }
+
+        if (!string.IsNullOrEmpty(delta?.Content))
+        {
+            contents.Add(new TextContent(delta.Content));
+        }
+
+        // Usage arrives in a final chunk (often with no choices) when stream_options.include_usage is set
+        if (ToUsage(chunk.Usage) is { } usage)
+        {
+            contents.Add(new UsageContent(usage));
+        }
+
+        var role = string.IsNullOrEmpty(delta?.Role) ? (ChatRole?)null : new ChatRole(delta.Role);
+
+        return new ChatResponseUpdate(role, contents)
+        {
+            ResponseId = chunk.Id,
+            ModelId = chunk.Model,
+            CreatedAt = chunk.Created is { } seconds ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null,
+            FinishReason = ToFinishReason(choice?.FinishReason),
+            AdditionalProperties = ToAdditionalProperties(chunk.ExtensionData),
+            RawRepresentation = chunk,
         };
     }
 
