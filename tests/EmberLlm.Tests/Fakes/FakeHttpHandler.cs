@@ -24,6 +24,18 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
         return this;
     }
 
+    /// <summary>Answers 200 with an event stream body read from <paramref name="stream"/>.</summary>
+    public FakeHttpHandler RespondStream(Stream stream)
+    {
+        _responses.Enqueue(_ =>
+        {
+            var content = new StreamContent(stream);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/event-stream");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+        });
+        return this;
+    }
+
     /// <summary>Never answers; completes only when the request is cancelled.</summary>
     public FakeHttpHandler Hang()
     {
