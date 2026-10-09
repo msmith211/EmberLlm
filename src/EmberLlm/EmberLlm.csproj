@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>EmberLlm</RootNamespace>
+    <PackageId>EmberLlm</PackageId>
+    <Description>Make local LLM servers (LM Studio, Ollama, llama.cpp, vLLM) feel native in .NET: server discovery, streaming chat, and typed structured output.</Description>
+    <PackageTags>llm;local-llm;ollama;lm-studio;llama.cpp;vllm;openai;ai;microsoft-extensions-ai</PackageTags>
+    <!-- Missing XML docs on public members (CS1591) fail the build via TreatWarningsAsErrors -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="EmberLlm.Tests" />
+  </ItemGroup>
+
+</Project>
