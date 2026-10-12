@@ -78,13 +78,32 @@ public class SseReaderTests
         Assert.Equal(["{\"content\":\"héllo 🔥\"}", "{\"content\":\"wörld\"}"], events);
     }
 
-    private static async Task<List<string>> ReadAllAsync(string input, int chunkSize = int.MaxValue)
+    [Fact]
+    public async Task EventName_IsReturnedWithItsData()
+    {
+        var events = await ReadAllEventsAsync("event: completion\ndata: one\n\ndata: two\n\n");
+
+        Assert.Equal([new SseEvent("completion", "one"), new SseEvent(null, "two")], events);
+    }
+
+    [Fact]
+    public async Task EventName_WithoutData_DoesNotLeakIntoNextEvent()
+    {
+        var events = await ReadAllEventsAsync("event: ping\n\ndata: payload\n\n");
+
+        Assert.Equal([new SseEvent(null, "payload")], events);
+    }
+
+    private static async Task<List<string>> ReadAllAsync(string input, int chunkSize = int.MaxValue) =>
+        [.. (await ReadAllEventsAsync(input, chunkSize)).Select(e => e.Data)];
+
+    private static async Task<List<SseEvent>> ReadAllEventsAsync(string input, int chunkSize = int.MaxValue)
     {
         using var stream = new ScriptedStream(input, chunkSize);
-        var events = new List<string>();
-        await foreach (var data in SseReader.ReadDataAsync(stream, TestContext.Current.CancellationToken))
+        var events = new List<SseEvent>();
+        await foreach (var sse in SseReader.ReadEventsAsync(stream, TestContext.Current.CancellationToken))
         {
-            events.Add(data);
+            events.Add(sse);
         }
 
         return events;
