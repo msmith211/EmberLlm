@@ -133,6 +133,50 @@ public class EmberLlmTimeoutException : EmberLlmException
 }
 
 /// <summary>
+/// With <see cref="EmberLlmOptions.StrictModelMatching"/> on, the server's reply reported a different model
+/// than the one requested, or reported none.
+/// </summary>
+public class ModelMismatchException : EmberLlmException
+{
+    /// <summary>Creates an exception with no message.</summary>
+    public ModelMismatchException()
+    {
+    }
+
+    /// <summary>Creates an exception with a message.</summary>
+    /// <param name="message">What went wrong.</param>
+    public ModelMismatchException(string message)
+        : base(message)
+    {
+    }
+
+    /// <summary>Creates an exception with a message and the exception that caused it.</summary>
+    /// <param name="message">What went wrong.</param>
+    /// <param name="innerException">The underlying failure.</param>
+    public ModelMismatchException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    /// <summary>Creates an exception describing a model mismatch.</summary>
+    /// <param name="message">What went wrong.</param>
+    /// <param name="requestedModel">The model EmberLlm asked for.</param>
+    /// <param name="reportedModel">The model the reply reported, or <see langword="null"/> if it reported none.</param>
+    public ModelMismatchException(string message, string requestedModel, string? reportedModel)
+        : base(message)
+    {
+        RequestedModel = requestedModel;
+        ReportedModel = reportedModel;
+    }
+
+    /// <summary>The model EmberLlm asked for.</summary>
+    public string? RequestedModel { get; }
+
+    /// <summary>The model the reply reported, or <see langword="null"/> if it reported none.</summary>
+    public string? ReportedModel { get; }
+}
+
+/// <summary>
 /// No model was named on the request or in <see cref="EmberLlmOptions.DefaultModel"/>, and the server lists no models.
 /// </summary>
 public class NoModelAvailableException : EmberLlmException

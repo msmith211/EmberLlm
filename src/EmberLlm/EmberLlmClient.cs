@@ -24,6 +24,7 @@ public sealed class EmberLlmClient : IChatClient
     private readonly string? _defaultModel;
     private readonly TimeSpan _requestTimeout;
     private readonly ChatClientMetadata _metadata;
+    private readonly bool _strictModelMatching;
     private readonly SemaphoreSlim _modelLock = new(1, 1);
     private volatile string? _firstListedModel;
     private bool _disposed;
@@ -72,6 +73,7 @@ public sealed class EmberLlmClient : IChatClient
         _modelsUri = new Uri(apiBase, "models");
         _defaultModel = string.IsNullOrWhiteSpace(options.DefaultModel) ? null : options.DefaultModel;
         _requestTimeout = options.RequestTimeout;
+        _strictModelMatching = options.StrictModelMatching;
         _metadata = new ChatClientMetadata(providerName: "EmberLlm", providerUri: apiBase, defaultModelId: _defaultModel);
 
         _ownsHttpClient = httpClient is null;
@@ -135,7 +137,13 @@ public sealed class EmberLlmClient : IChatClient
         using var httpRequest = CreateChatRequestMessage(body, model);
 
         var wire = await SendAsync(httpRequest, WireJsonContext.Default.WireChatResponse, cancellationToken).ConfigureAwait(false);
-        return ChatMapper.ToChatResponse(wire);
+        var response = ChatMapper.ToChatResponse(wire);
+        if (_strictModelMatching)
+        {
+            EnsureModelMatches(model, response.ModelId, httpRequest);
+        }
+
+        return response;
     }
 
     /// <summary>
@@ -275,6 +283,7 @@ public sealed class EmberLlmClient : IChatClient
         var events = SseReader.ReadEventsAsync(stream, timeoutSource.Token).GetAsyncEnumerator(timeoutSource.Token);
         await using var eventsScope = events.ConfigureAwait(false);
 
+        var modelChecked = false;
         while (true)
         {
             // C# can't yield inside a try with a catch, so each read is wrapped on its own
@@ -283,7 +292,7 @@ public sealed class EmberLlmClient : IChatClient
             {
                 if (!await events.MoveNextAsync().ConfigureAwait(false))
                 {
-                    yield break;
+                    break;
                 }
 
                 sse = events.Current;
@@ -301,7 +310,43 @@ public sealed class EmberLlmClient : IChatClient
                 (update.AdditionalProperties ??= [])["sse.event"] = eventType;
             }
 
+            // Strict mode checks the first chunk that reports a model, before anything is handed to the caller
+            if (_strictModelMatching && !modelChecked && update.ModelId is not null)
+            {
+                EnsureModelMatches(model, update.ModelId, httpRequest);
+                modelChecked = true;
+            }
+
             yield return update;
+        }
+
+        // In strict mode a stream that never said which model answered can't be verified, so it fails
+        // rather than passing silently
+        if (_strictModelMatching && !modelChecked)
+        {
+            EnsureModelMatches(model, reportedModel: null, httpRequest);
+        }
+    }
+
+    /// <summary>
+    /// Strict mode: throws <see cref="ModelMismatchException"/> unless the reply reported the requested model.
+    /// </summary>
+    private static void EnsureModelMatches(string requestedModel, string? reportedModel, HttpRequestMessage request)
+    {
+        if (reportedModel is null)
+        {
+            throw new ModelMismatchException(
+                $"{request.Method} {request.RequestUri} did not report which model answered, so StrictModelMatching can't confirm it was \"{requestedModel}\".",
+                requestedModel,
+                reportedModel);
+        }
+
+        if (!string.Equals(requestedModel, reportedModel, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ModelMismatchException(
+                $"Requested model \"{requestedModel}\" but {request.RequestUri} answered with \"{reportedModel}\". Some servers substitute the loaded model for an unknown one.",
+                requestedModel,
+                reportedModel);
         }
     }
 

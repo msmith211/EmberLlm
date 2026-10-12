@@ -27,4 +27,14 @@ public sealed class EmberLlmOptions
     /// Use <see cref="Timeout.InfiniteTimeSpan"/> to rely only on the caller's cancellation token.
     /// </summary>
     public TimeSpan RequestTimeout { get; set; } = DefaultRequestTimeout;
+
+    /// <summary>
+    /// When <see langword="true"/>, a reply that reports a different model than the one EmberLlm requested
+    /// throws <see cref="ModelMismatchException"/>, and so does a reply that reports no model at all, since it
+    /// can't be checked. Off by default. Some servers (LM Studio, for one) answer a request for an unknown
+    /// model with whichever model is loaded instead of returning an error; turn this on to catch that.
+    /// The comparison ignores case but is otherwise exact, so a server that answers with an alias of the
+    /// requested name (for example <c>llama3</c> answered as <c>llama3:latest</c>) also throws.
+    /// </summary>
+    public bool StrictModelMatching { get; set; }
 }
