@@ -12,7 +12,7 @@ public class ModelSelectionTests
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.Completion());
         using var client = TestClients.Create(handler, o => o.DefaultModel = "default-model");
 
-        await client.ChatAsync(new ChatRequest { Model = "request-model", Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([new(ChatRole.User, "Hi")], new ChatOptions { ModelId = "request-model" }, TestContext.Current.CancellationToken);
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal("request-model", SentModel(request));

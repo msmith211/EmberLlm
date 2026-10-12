@@ -6,7 +6,9 @@ namespace EmberLlm.Tests.Chat;
 
 public class ChatErrorTests
 {
-    private static readonly ChatRequest Request = new() { Model = "qwen3-14b", Messages = [new(ChatRole.User, "Hi")] };
+    private static readonly ChatMessage[] Messages = [new(ChatRole.User, "Hi")];
+
+    private static readonly ChatOptions Options = new() { ModelId = "qwen3-14b" };
 
     [Fact]
     public async Task ClientError_OpenAiShape_ThrowsHttpExceptionWithServerMessage()
@@ -14,7 +16,7 @@ public class ChatErrorTests
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.OpenAiError, HttpStatusCode.BadRequest);
         using var client = TestClients.Create(handler);
 
-        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
 
         Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
         Assert.Equal("max_tokens must be positive", ex.ServerMessage);
@@ -29,7 +31,7 @@ public class ChatErrorTests
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.OllamaError, HttpStatusCode.NotFound);
         using var client = TestClients.Create(handler);
 
-        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
 
         Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
         Assert.Equal("model 'missing-model' not found", ex.ServerMessage);
@@ -41,7 +43,7 @@ public class ChatErrorTests
         var handler = new FakeHttpHandler().Respond(HttpStatusCode.InternalServerError, SampleResponses.HtmlErrorPage, "text/html");
         using var client = TestClients.Create(handler);
 
-        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
 
         Assert.Equal(HttpStatusCode.InternalServerError, ex.StatusCode);
         Assert.True(ex.IsServerError);
@@ -57,7 +59,7 @@ public class ChatErrorTests
         var handler = new FakeHttpHandler().Respond(HttpStatusCode.BadGateway, longBody);
         using var client = TestClients.Create(handler);
 
-        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<EmberLlmHttpException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
 
         Assert.True(ex.Message.Length < 1_000);
         Assert.Equal(longBody, ex.ResponseBody);
@@ -70,7 +72,7 @@ public class ChatErrorTests
         var handler = new FakeHttpHandler().Throw(refused);
         using var client = TestClients.Create(handler);
 
-        var ex = await Assert.ThrowsAsync<EmberLlmConnectionException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<EmberLlmConnectionException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
 
         Assert.Same(refused, ex.InnerException);
     }
@@ -81,7 +83,7 @@ public class ChatErrorTests
         var handler = new FakeHttpHandler().Hang();
         using var client = TestClients.Create(handler, o => o.RequestTimeout = TimeSpan.FromMilliseconds(100));
 
-        await Assert.ThrowsAsync<EmberLlmTimeoutException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<EmberLlmTimeoutException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -92,7 +94,7 @@ public class ChatErrorTests
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(100) };
         using var client = new EmberLlmClient(http, new EmberLlmOptions { BaseUrl = TestClients.BaseUrl });
 
-        await Assert.ThrowsAsync<EmberLlmTimeoutException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<EmberLlmTimeoutException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -103,7 +105,7 @@ public class ChatErrorTests
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromMilliseconds(100));
 
-        var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ChatAsync(Request, cancellation.Token));
+        var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetResponseAsync(Messages, Options, cancellation.Token));
 
         Assert.Equal(cancellation.Token, ex.CancellationToken);
     }
@@ -114,7 +116,7 @@ public class ChatErrorTests
         var handler = new FakeHttpHandler();
         using var client = TestClients.Create(handler);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ChatAsync(Request, new CancellationToken(canceled: true)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetResponseAsync(Messages, Options, new CancellationToken(canceled: true)));
 
         Assert.Empty(handler.Requests);
     }

@@ -6,15 +6,17 @@ namespace EmberLlm.Tests.Chat;
 
 public class ChatResponseTests
 {
-    private static readonly ChatRequest Request = new() { Model = "qwen3-14b", Messages = [new(ChatRole.User, "Hi")] };
+    private static readonly ChatMessage[] Messages = [new(ChatRole.User, "Hi")];
+
+    private static readonly ChatOptions Options = new() { ModelId = "qwen3-14b" };
 
     [Fact]
-    public async Task ChatAsync_MapsTextModelUsageAndFinishReason()
+    public async Task GetResponseAsync_MapsTextModelUsageAndFinishReason()
     {
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.Completion("Hello there!"));
         using var client = TestClients.Create(handler);
 
-        var response = await client.ChatAsync(Request, TestContext.Current.CancellationToken);
+        var response = await client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken);
 
         Assert.Equal("Hello there!", response.Text);
         Assert.Equal(ChatRole.Assistant, Assert.Single(response.Messages).Role);
@@ -33,23 +35,23 @@ public class ChatResponseTests
     [InlineData("tool_calls", "tool_calls")]
     [InlineData("content_filter", "content_filter")]
     [InlineData("eos", "eos")]
-    public async Task ChatAsync_MapsFinishReason(string wireValue, string expected)
+    public async Task GetResponseAsync_MapsFinishReason(string wireValue, string expected)
     {
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.Completion(finishReason: wireValue));
         using var client = TestClients.Create(handler);
 
-        var response = await client.ChatAsync(Request, TestContext.Current.CancellationToken);
+        var response = await client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken);
 
         Assert.Equal(new ChatFinishReason(expected), response.FinishReason);
     }
 
     [Fact]
-    public async Task ChatAsync_ReasoningContent_IsSeparateFromText()
+    public async Task GetResponseAsync_ReasoningContent_IsSeparateFromText()
     {
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.CompletionWithReasoning);
         using var client = TestClients.Create(handler);
 
-        var response = await client.ChatAsync(Request, TestContext.Current.CancellationToken);
+        var response = await client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken);
 
         Assert.Equal("42", response.Text);
         var reasoning = Assert.Single(response.Messages[0].Contents.OfType<TextReasoningContent>());
@@ -57,12 +59,12 @@ public class ChatResponseTests
     }
 
     [Fact]
-    public async Task ChatAsync_UnknownFields_LandInAdditionalProperties()
+    public async Task GetResponseAsync_UnknownFields_LandInAdditionalProperties()
     {
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.CompletionWithTimings);
         using var client = TestClients.Create(handler);
 
-        var response = await client.ChatAsync(Request, TestContext.Current.CancellationToken);
+        var response = await client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken);
 
         Assert.NotNull(response.AdditionalProperties);
         var timings = Assert.IsType<JsonElement>(response.AdditionalProperties["timings"]);
@@ -71,22 +73,22 @@ public class ChatResponseTests
     }
 
     [Fact]
-    public async Task ChatAsync_NoChoices_ThrowsEmberLlmException()
+    public async Task GetResponseAsync_NoChoices_ThrowsEmberLlmException()
     {
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.CompletionWithNoChoices);
         using var client = TestClients.Create(handler);
 
-        var ex = await Assert.ThrowsAsync<EmberLlmException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<EmberLlmException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
         Assert.Contains("no choices", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ChatAsync_InvalidJson_ThrowsEmberLlmException()
+    public async Task GetResponseAsync_InvalidJson_ThrowsEmberLlmException()
     {
         var handler = new FakeHttpHandler().Respond(System.Net.HttpStatusCode.OK, "not json");
         using var client = TestClients.Create(handler);
 
-        var ex = await Assert.ThrowsAsync<EmberLlmException>(() => client.ChatAsync(Request, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<EmberLlmException>(() => client.GetResponseAsync(Messages, Options, TestContext.Current.CancellationToken));
         Assert.IsType<JsonException>(ex.InnerException, exactMatch: false);
     }
 }

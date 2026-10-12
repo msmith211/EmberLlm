@@ -16,28 +16,16 @@ internal static class ChatMapper
     // Message fields EmberLlm sets itself; AdditionalProperties may not override them
     private static readonly HashSet<string> MappedMessageFields = ["role", "content", "name"];
 
-    public static WireChatRequest ToWire(ChatRequest request, string model, bool stream)
+    public static WireMessage ToWireMessage(ChatMessage message)
     {
-        var messages = new List<WireMessage>(request.Messages.Count);
-        foreach (var message in request.Messages)
-        {
-            messages.Add(new WireMessage
-            {
-                Role = message.Role.Value,
-                Content = GetText(message),
-                Name = message.AuthorName,
-                ExtensionData = ToExtensionData(message),
-            });
-        }
+        ArgumentNullException.ThrowIfNull(message);
 
-        return new WireChatRequest
+        return new WireMessage
         {
-            Model = model,
-            Messages = messages,
-            Temperature = request.Temperature,
-            MaxTokens = request.MaxTokens,
-            Stream = stream,
-            StreamOptions = stream ? new WireStreamOptions { IncludeUsage = true } : null,
+            Role = message.Role.Value,
+            Content = GetText(message),
+            Name = message.AuthorName,
+            ExtensionData = ToExtensionData(message),
         };
     }
 

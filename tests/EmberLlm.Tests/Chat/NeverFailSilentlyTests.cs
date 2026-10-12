@@ -19,7 +19,7 @@ public class NeverFailSilentlyTests
         using var client = TestClients.Create(handler);
         var message = new ChatMessage(ChatRole.User, "Hi") { AuthorName = "alice" };
 
-        await client.ChatAsync(new ChatRequest { Model = "m", Messages = [message] }, TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([message], new ChatOptions { ModelId = "m" }, TestContext.Current.CancellationToken);
 
         Assert.Equal("alice", SentMessages(handler)[0].GetProperty("name").GetString());
     }
@@ -30,7 +30,7 @@ public class NeverFailSilentlyTests
         var handler = new FakeHttpHandler().RespondJson(SampleResponses.Completion());
         using var client = TestClients.Create(handler);
 
-        await client.ChatAsync(new ChatRequest { Model = "m", Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([new(ChatRole.User, "Hi")], new ChatOptions { ModelId = "m" }, TestContext.Current.CancellationToken);
 
         Assert.False(SentMessages(handler)[0].TryGetProperty("name", out _));
     }
@@ -53,7 +53,7 @@ public class NeverFailSilentlyTests
             },
         };
 
-        await client.ChatAsync(new ChatRequest { Model = "m", Messages = [message] }, TestContext.Current.CancellationToken);
+        await client.GetResponseAsync([message], new ChatOptions { ModelId = "m" }, TestContext.Current.CancellationToken);
 
         var sent = SentMessages(handler)[0];
         Assert.Equal("value", sent.GetProperty("text_field").GetString());
@@ -76,7 +76,7 @@ public class NeverFailSilentlyTests
         var message = new ChatMessage(ChatRole.User, "Hi") { AdditionalProperties = new() { [field] = "x" } };
 
         var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
-            client.ChatAsync(new ChatRequest { Model = "m", Messages = [message] }, TestContext.Current.CancellationToken));
+            client.GetResponseAsync([message], new ChatOptions { ModelId = "m" }, TestContext.Current.CancellationToken));
 
         Assert.Contains(field, ex.Message, StringComparison.Ordinal);
         Assert.Empty(handler.Requests);
@@ -143,7 +143,7 @@ public class NeverFailSilentlyTests
         var handler = new FakeHttpHandler().RespondJson(json);
         using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
 
-        var response = await client.ChatAsync(new ChatRequest { Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken);
+        var response = await client.GetResponseAsync([new(ChatRole.User, "Hi")], options: null, TestContext.Current.CancellationToken);
 
         var message = Assert.Single(response.Messages);
         Assert.Equal("bot", message.AuthorName);
@@ -163,7 +163,7 @@ public class NeverFailSilentlyTests
         var handler = new FakeHttpHandler().RespondJson(json);
         using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
 
-        var response = await client.ChatAsync(new ChatRequest { Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken);
+        var response = await client.GetResponseAsync([new(ChatRole.User, "Hi")], options: null, TestContext.Current.CancellationToken);
 
         var properties = response.AdditionalProperties!;
         Assert.True(properties.ContainsKey("logprobs"));
@@ -181,7 +181,7 @@ public class NeverFailSilentlyTests
         using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
 
         var updates = new List<ChatResponseUpdate>();
-        await foreach (var update in client.StreamUpdatesAsync(new ChatRequest { Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken))
+        await foreach (var update in client.GetStreamingResponseAsync([new(ChatRole.User, "Hi")], options: null, TestContext.Current.CancellationToken))
         {
             updates.Add(update);
         }
@@ -202,7 +202,7 @@ public class NeverFailSilentlyTests
         var handler = new FakeHttpHandler().RespondJson(json);
         using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
 
-        var response = await client.ChatAsync(new ChatRequest { Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken);
+        var response = await client.GetResponseAsync([new(ChatRole.User, "Hi")], options: null, TestContext.Current.CancellationToken);
 
         Assert.Equal(10, response.Usage?.InputTokenCount);
         var details = Assert.IsType<JsonElement>(response.AdditionalProperties!["usage.prompt_tokens_details"]);
@@ -217,7 +217,7 @@ public class NeverFailSilentlyTests
         using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
 
         var updates = new List<ChatResponseUpdate>();
-        await foreach (var update in client.StreamUpdatesAsync(new ChatRequest { Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken))
+        await foreach (var update in client.GetStreamingResponseAsync([new(ChatRole.User, "Hi")], options: null, TestContext.Current.CancellationToken))
         {
             updates.Add(update);
         }
@@ -255,7 +255,7 @@ public class NeverFailSilentlyTests
         using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
 
         var updates = new List<ChatResponseUpdate>();
-        await foreach (var update in client.StreamUpdatesAsync(new ChatRequest { Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken))
+        await foreach (var update in client.GetStreamingResponseAsync([new(ChatRole.User, "Hi")], options: null, TestContext.Current.CancellationToken))
         {
             updates.Add(update);
         }
