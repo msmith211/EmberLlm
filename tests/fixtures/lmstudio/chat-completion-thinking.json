@@ -1,0 +1,29 @@
+{
+  "id": "chatcmpl-p3605pde12i7kzouprwx",
+  "object": "chat.completion",
+  "created": 1791841826,
+  "model": "qwen/qwen3-4b-thinking-2507",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "42",
+        "reasoning_content": "First, the user asked: \"What is 17 + 25? Reply with just the number.\"\n\nI need to calculate 17 plus 25. Let me do that mentally. 17 plus 25 is 42. I can confirm that: 10 + 20 is 30, and 7 + 5 is 12, so 30 + 12 is 42. Yeah, that's right.\n\nThe instruction says: \"Reply with just the number.\" So, I shouldn't add any extra text, like \"42\" or \"The answer is 42.\" I have to respond with only the number.\n\nAlso, the user specified \"Reply with just the number,\" so I should output just \"42\" without any punctuation or spaces.\n\nLet me think if there's any trick here. Is there any context I'm missing? The user said \"17 + 25\", which is straightforward addition. No hidden meanings or anything. It's a simple math question.\n\nI recall that in some contexts, people might expect a different response, but here it's clear. Just the number.\n\nSo, my response should be: 42\n\nBut to be precise, since it says \"just the number,\" I should write it as a number, not a word. So, no \"fourty-two\" or anything.\n\nAlso, in the response, I shouldn't have any other characters. Like, no quotes, no spaces.\n\nThe user said \"Reply with just the number,\" so in the context of this chat, I should output only the number.\n\nLet me see the example: if I were to reply, it should be something like:\n\n42\n\nBut in text, it might be written as 42.\n\nI think for this platform, I can just output the number.\n\nTo be safe, I'll make sure it's only the number.\n\nFinal answer: 42\n\nSo, my response is 42.\n",
+        "tool_calls": []
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 26,
+    "completion_tokens": 418,
+    "total_tokens": 444,
+    "completion_tokens_details": {
+      "reasoning_tokens": 413
+    }
+  },
+  "stats": {},
+  "system_fingerprint": "qwen/qwen3-4b-thinking-2507"
+}

@@ -227,7 +227,7 @@ internal static class ChatMapper
         return builder.ToString();
     }
 
-    private static AdditionalPropertiesDictionary? ToAdditionalProperties(Dictionary<string, JsonElement>? extensionData)
+    internal static AdditionalPropertiesDictionary? ToAdditionalProperties(Dictionary<string, JsonElement>? extensionData)
     {
         if (extensionData is null || extensionData.Count == 0)
         {

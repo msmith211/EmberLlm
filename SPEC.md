@@ -93,7 +93,7 @@ Reuse Microsoft.Extensions.AI types wherever the concept already exists ([0001](
 | Full response (text, usage, finish reason) | `Microsoft.Extensions.AI.ChatResponse`, `UsageDetails` |
 | Streaming update | `Microsoft.Extensions.AI.ChatResponseUpdate` |
 | Client metadata | `Microsoft.Extensions.AI.ChatClientMetadata`, returned by `GetService` |
-| Model info | `EmberLlm.ModelInfo` |
+| Model info | `EmberLlm.ModelInfo`, in a `ModelList` (an `IReadOnlyList<ModelInfo>` that also keeps top-level fields) |
 | Discovery result | `EmberLlm.DiscoveredServer`, `BackendType` |
 
 Backend-specific extras (for example llama.cpp `timings`) go into `AdditionalProperties` on the response or update rather than new types.
@@ -270,7 +270,7 @@ Build in this order, one milestone per session or PR. Each milestone ends with p
 3. **Streaming.** *(Done.)* SSE parser, `StreamAsync` (overloads for a prompt string and a `ChatRequest`) and `StreamUpdatesAsync`; request `stream_options.include_usage` so the final update carries usage. Verify each backend accepts `stream_options` when recording fixtures. Done when fixture tests cover split chunks, `[DONE]`, keep-alive comments, usage in the final update, and cancellation mid-stream.
 
    **3b. IChatClient.** Make `EmberLlmClient` implement `IChatClient` ([0005](docs/decisions/0005-emberllmclient-implements-ichatclient.md)): `GetResponseAsync` and `GetStreamingResponseAsync` replace `ChatAsync` and `StreamUpdatesAsync`; remove `ChatRequest` and the `StreamAsync(ChatRequest)` overload; map `ChatOptions` per Design rules; implement `GetService` returning `ChatClientMetadata`. Also: update the `NoModelAvailableException` message to name `ChatOptions.ModelId`, add a test proving concurrent first calls make only one `/v1/models` request, and delete the leftover `AssemblyTests`. Done when every existing behavior test passes against the new methods, each mapped option and each rejection has a test, `AdditionalProperties` pass through, and the `ChatOptions` guard test passes.
-4. **Models.** `ListModelsAsync` with typed `ModelInfo`. Done when fixtures from at least LM Studio and Ollama parse.
+4. **Models.** `ListModelsAsync` with typed `ModelInfo`. Done when fixtures from at least LM Studio and Ollama parse. (LM Studio fixtures are recorded; the Ollama fixture test is in place but skipped until a real Ollama response is recorded.)
 5. **Discovery.** Parallel probing and fingerprinting per the table above. Done when fixture-based unit tests identify each backend, reject a non-LLM server on port 8000/8080, and return empty when nothing answers. Verifying against a running LM Studio is a manual check, not a CI test.
 
    **5b. Comparison spike.** A time-boxed experiment, not library code: compare EmberLlm with the obvious alternative, the official OpenAI SDK plus Microsoft's adapter pointed at a local server, using LM Studio and a small thinking model. Check at least: whether reasoning content survives, whether a model name is required, what errors look like when the server is down or the model is missing, and how Microsoft.Extensions.AI's own `GetResponseAsync<T>` copes with small-model output (code fences, `<think>` blocks, missing fields, retries). Throwaway code lives in `spikes/`; findings go in `docs/spikes/`. Done when the findings are written up, milestone 6's scope is confirmed or narrowed, and the README's "why this exists" section is revised so every claim is backed by the findings.

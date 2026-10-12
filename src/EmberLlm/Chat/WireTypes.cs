@@ -128,11 +128,24 @@ internal sealed class WireUsage
 internal sealed class WireModelList
 {
     public IReadOnlyList<WireModel>? Data { get; init; }
+
+    // For example "object": "list"
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 internal sealed class WireModel
 {
     public string? Id { get; init; }
+
+    public string? OwnedBy { get; init; }
+
+    // Unix seconds; LM Studio leaves it out
+    public long? Created { get; init; }
+
+    // For example "object": "model", llama.cpp's "meta" or vLLM's "max_model_len"
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 [JsonSourceGenerationOptions(

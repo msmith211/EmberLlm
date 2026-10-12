@@ -1,0 +1,8 @@
+{
+    "error": {
+        "message": "Invalid model identifier \"does-not-exist\". No matching loaded model found, and just-in-time (JIT) model loading is disabled. Ensure you have this model loaded first. JIT loading can be enabled in LM Studio Server Settings.",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
