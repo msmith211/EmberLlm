@@ -52,12 +52,12 @@ dotnet add reference path/to/EmberLlm/src/EmberLlm/EmberLlm.csproj
 
 ### Chat and stream
 
-Start a local server (LM Studio listens on `http://localhost:1234` by default) with a model loaded, then:
+Start a local server with a model loaded (LM Studio listens on port 1234 by default), then:
 
 ```csharp
 using EmberLlm;
 
-using var llm = new EmberLlmClient("http://localhost:1234");
+using var llm = new EmberLlmClient("http://127.0.0.1:1234");
 
 // One reply, no model name needed
 string answer = await llm.CompleteAsync("Explain Span<T> in two sentences.");
@@ -68,6 +68,9 @@ await foreach (string token in llm.StreamAsync("Write a haiku about garbage coll
     Console.Write(token);
 ```
 
+> [!TIP]
+> Prefer `127.0.0.1` over `localhost`, especially on Windows. .NET tries IPv6 (`::1`) first, and many local servers, LM Studio included, listen only on IPv4, so the first request to `localhost` waits about 2 seconds for the refused IPv6 attempt before falling back.
+
 ### Use it as an `IChatClient`
 
 ```csharp
@@ -76,7 +79,7 @@ using Microsoft.Extensions.AI;
 
 using var llm = new EmberLlmClient(new EmberLlmOptions
 {
-    BaseUrl = "http://localhost:1234",
+    BaseUrl = "http://127.0.0.1:1234",
     DefaultModel = "qwen/qwen3-4b-thinking-2507", // optional
 });
 
@@ -143,13 +146,13 @@ Tool calling and loading or unloading models are planned for v0.2. See [ROADMAP.
 
 EmberLlm talks to any server with an OpenAI-compatible `/v1/chat/completions` endpoint. Only LM Studio has been tested against a real server so far.
 
-| Backend | Default port | Tested | Notes |
+| Backend | Default URL | Tested | Notes |
 | --- | --- | --- | --- |
-| LM Studio | 1234 | Yes | Lists loaded models. LM Studio may answer a request for an unknown model with whichever model is loaded instead of failing (seen with one model loaded; with two loaded it returned an error). Check `reply.ModelId`, or set `StrictModelMatching = true` to make a mismatch throw. |
-| Ollama | 11434 | Not yet | Set `DefaultModel`: Ollama's `/v1/models` lists every installed model, not just loaded ones, so picking the first could trigger a model load. |
-| llama.cpp server | 8080 | Not yet | |
-| vLLM | 8000 | Not yet | |
-| Other OpenAI-compatible servers | (configure) | Not yet | |
+| LM Studio | `http://127.0.0.1:1234` | Yes | Lists loaded models. LM Studio may answer a request for an unknown model with whichever model is loaded instead of failing (seen with one model loaded; with two loaded it returned an error). Check `reply.ModelId`, or set `StrictModelMatching = true` to make a mismatch throw. |
+| Ollama | `http://127.0.0.1:11434` | Not yet | Set `DefaultModel`: Ollama's `/v1/models` lists every installed model, not just loaded ones, so picking the first could trigger a model load. |
+| llama.cpp server | `http://127.0.0.1:8080` | Not yet | |
+| vLLM | `http://127.0.0.1:8000` | Not yet | |
+| Other OpenAI-compatible servers | (your server's URL) | Not yet | |
 
 Bug reports and recorded responses from untested backends are especially welcome; see [CONTRIBUTING.md](CONTRIBUTING.md#recorded-fixtures).
 
