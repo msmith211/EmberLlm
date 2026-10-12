@@ -8,6 +8,7 @@ Short records of significant design choices: what was decided, why, and what els
 | [0002](0002-model-selection-order.md) | Resolve the model from request, then default, then the server's first listed model | Accepted |
 | [0003](0003-exception-model.md) | Separate exception types for HTTP errors, unreachable servers, timeouts and cancellation | Accepted |
 | [0004](0004-streaming-timeout-scope.md) | RequestTimeout bounds the whole stream | Accepted |
+| [0006](0006-fix-silent-data-drops.md) | Fix silent data drops in the chat mapping | Accepted |
 
 ## Writing a new note
 
