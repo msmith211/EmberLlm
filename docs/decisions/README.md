@@ -12,6 +12,7 @@ Short records of significant design choices: what was decided, why, and what els
 | [0006](0006-fix-silent-data-drops.md) | Fix silent data drops in the chat mapping | Accepted |
 | [0007](0007-map-topk-reasoning-and-response-format.md) | Map TopK, reasoning effort and response format | Accepted |
 | [0008](0008-model-substitution-and-strict-matching.md) | Report model substitution, with opt-in strict matching | Accepted |
+| [0009](0009-discovery-design.md) | Discovery: confirm with /v1/models, identify by content, report what was skipped | **Proposed** |
 
 ## Writing a new note
 

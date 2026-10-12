@@ -210,22 +210,24 @@ Document in the README that on Ollama, `/v1/models` lists every installed model,
 
 All four backends expose an OpenAI-compatible API, which is the only path v0.1 depends on. Native endpoints are used only to fingerprint the backend. Verify each probe and capability against current backend docs before relying on it, and record a fixture for each.
 
-| Backend | Default port | OpenAI base path | Fingerprint probe | `json_schema` response_format |
-| --- | --- | --- | --- | --- |
-| LM Studio | 1234 | /v1 | LM Studio native REST endpoint (/api/v0/models) | Yes (verify) |
-| Ollama | 11434 | /v1 | GET / returns "Ollama is running"; /api/tags | Yes (verify) |
-| llama.cpp server | 8080 | /v1 | /health and /props | Yes (verify) |
-| vLLM | 8000 | /v1 | /version | Yes (verify) |
-| Generic | — | /v1 | none (`/v1/models` only) | No, use prompt fallback |
+Fingerprints match on response **content**, never on status code alone: LM Studio answers unknown endpoints with HTTP 200 and an error body ([0009](docs/decisions/0009-discovery-design.md)).
+
+| Backend | Default URL | OpenAI base path | Fingerprint (content) | Version from | `json_schema` response_format |
+| --- | --- | --- | --- | --- | --- |
+| LM Studio | http://127.0.0.1:1234 | /v1 | `/api/v0/models` items have `publisher`/`arch`/`state`, or `/api/v1/models` items have `key` (verified against LM Studio) | — | Yes (verified) |
+| Ollama | http://127.0.0.1:11434 | /v1 | `GET /` contains "Ollama is running" (from docs) | `/api/version` | Yes (verify) |
+| llama.cpp server | http://127.0.0.1:8080 | /v1 | `/props` contains `default_generation_settings` (from docs) | `build_info` in `/props` | Yes (verify) |
+| vLLM | http://127.0.0.1:8000 | /v1 | models `owned_by: "vllm"` or with `max_model_len` (from docs) | `/version` | Yes (verify) |
+| Generic | — | /v1 | none (`/v1/models` only) | — | No, use prompt fallback |
 
 Discovery rules:
 
-- Probe localhost on the default ports in parallel, 500 ms timeout per probe
-- Accept extra hosts/ports through options (for a LAN box running the server)
+- Probe `127.0.0.1` on the default ports in parallel, 500 ms timeout per probe (`DiscoveryOptions.ProbeTimeout`). Not `localhost`: on Windows, .NET tries IPv6 first and an IPv4-only server then takes ~2 s to reach
+- Accept extra endpoints through `DiscoveryOptions.Endpoints` (for a LAN box running the server); the same server listed twice is probed once
 - A server is reported only if `/v1/models` returns a valid OpenAI-style model list. Ports 8000 and 8080 are common for unrelated dev servers, so a fingerprint match alone is not enough
-- Return `DiscoveredServer` records with base URL, backend type, version if known, and model count
+- Return a `DiscoveryResult` (an `IReadOnlyList<DiscoveredServer>`, in endpoint order) whose servers carry base URL, backend type, version if known, and the model list
 - Unknown but OpenAI-compatible servers return as `BackendType.Generic`
-- Never throw from discovery; return an empty list when nothing answers
+- Never throw because of a server. Endpoints that answered but weren't usable are reported in `DiscoveryResult.Skipped` with the reason; endpoints where nothing answered are not listed. Caller cancellation throws `OperationCanceledException`
 
 ## Testing strategy
 
@@ -257,7 +259,6 @@ Unit tests run everywhere with no server; integration tests are opt-in and run a
 **Decision notes:** record each significant design choice in `docs/decisions/NNNN-title.md` (short format: context, decision, alternatives considered, consequences). Write one whenever a choice would prompt "why did you do it this way?" in a code review. Fixes that only bring code in line with an existing rule get a short fix note instead. The index is [docs/decisions/README.md](docs/decisions/README.md). Still to write, in the milestones that make them:
 
 - Strict deserialization instead of JSON Schema validation for structured output (milestone 6)
-- Requiring a valid `/v1/models` response before reporting a discovered server (milestone 5)
 
 **Repo hygiene:** `CHANGELOG.md` (Keep a Changelog format), `ROADMAP.md`, `CONTRIBUTING.md`, one bug-report issue template, MIT `LICENSE`, `.editorconfig`, `.gitattributes`. Nothing heavier; governance documents look odd on a one-person project.
 
