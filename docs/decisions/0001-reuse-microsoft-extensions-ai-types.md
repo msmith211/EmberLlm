@@ -1,6 +1,6 @@
 # 0001. Reuse Microsoft.Extensions.AI types for messages and responses
 
-- Status: Accepted
+- Status: Accepted; the `ChatRequest` part is superseded by [0005](0005-emberllmclient-implements-ichatclient.md)
 - Date: 2026-10-09
 
 ## Context
