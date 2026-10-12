@@ -225,6 +225,47 @@ public class NeverFailSilentlyTests
         Assert.True(Assert.Single(updates).AdditionalProperties!.ContainsKey("usage.completion_tokens_details"));
     }
 
+    // Incoming: SSE event names
+
+    [Fact]
+    public async Task Stream_ErrorNamedEvent_Throws_EvenWithoutErrorField()
+    {
+        var sse = $"data: {SampleStreams.ContentChunk("Heap")}\n\nevent: error\ndata: {{\"message\":\"model unloaded\"}}\n\ndata: [DONE]\n\n";
+        var handler = new FakeHttpHandler().RespondStream(new ScriptedStream(sse));
+        using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
+        var received = new List<string>();
+
+        var ex = await Assert.ThrowsAsync<EmberLlmException>(async () =>
+        {
+            await foreach (var token in client.StreamAsync("Hi", TestContext.Current.CancellationToken))
+            {
+                received.Add(token);
+            }
+        });
+
+        Assert.Equal(["Heap"], received);
+        Assert.Contains("model unloaded", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Stream_CustomEventName_IsKeptInAdditionalProperties()
+    {
+        var sse = $"event: completion\ndata: {SampleStreams.ContentChunk("Heap")}\n\nevent: message\ndata: {SampleStreams.ContentChunk(" fills")}\n\ndata: [DONE]\n\n";
+        var handler = new FakeHttpHandler().RespondStream(new ScriptedStream(sse));
+        using var client = TestClients.Create(handler, o => o.DefaultModel = "m");
+
+        var updates = new List<ChatResponseUpdate>();
+        await foreach (var update in client.StreamUpdatesAsync(new ChatRequest { Messages = [new(ChatRole.User, "Hi")] }, TestContext.Current.CancellationToken))
+        {
+            updates.Add(update);
+        }
+
+        Assert.Equal("completion", updates[0].AdditionalProperties?["sse.event"]);
+
+        // "message" is the SSE default name, so it isn't recorded
+        Assert.Null(updates[1].AdditionalProperties);
+    }
+
     // Guard: every ChatMessage property is classified
 
     private static readonly HashSet<string> MappedMessageProperties = ["Role", "Contents", "AuthorName", "AdditionalProperties"];

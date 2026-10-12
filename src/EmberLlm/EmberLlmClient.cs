@@ -239,13 +239,13 @@ public sealed class EmberLlmClient : IDisposable
         using var responseScope = response;
         await using var streamScope = stream.ConfigureAwait(false);
 
-        var events = SseReader.ReadDataAsync(stream, timeoutSource.Token).GetAsyncEnumerator(timeoutSource.Token);
+        var events = SseReader.ReadEventsAsync(stream, timeoutSource.Token).GetAsyncEnumerator(timeoutSource.Token);
         await using var eventsScope = events.ConfigureAwait(false);
 
         while (true)
         {
             // C# can't yield inside a try with a catch, so each read is wrapped on its own
-            string data;
+            SseEvent sse;
             try
             {
                 if (!await events.MoveNextAsync().ConfigureAwait(false))
@@ -253,14 +253,22 @@ public sealed class EmberLlmClient : IDisposable
                     yield break;
                 }
 
-                data = events.Current;
+                sse = events.Current;
             }
             catch (Exception ex) when (TranslateFailure(ex, httpRequest, cancellationToken) is { } translated)
             {
                 throw translated;
             }
 
-            yield return ChatMapper.ToUpdate(ParseChunk(data, httpRequest));
+            var update = ChatMapper.ToUpdate(ParseChunk(sse, httpRequest));
+
+            // "message" is the SSE default name; anything else is kept rather than dropped (decision 0006)
+            if (sse.EventType is { Length: > 0 } eventType && eventType != "message")
+            {
+                (update.AdditionalProperties ??= [])["sse.event"] = eventType;
+            }
+
+            yield return update;
         }
     }
 
@@ -291,8 +299,17 @@ public sealed class EmberLlmClient : IDisposable
         }
     }
 
-    private static WireChatResponse ParseChunk(string data, HttpRequestMessage request)
+    private static WireChatResponse ParseChunk(SseEvent sse, HttpRequestMessage request)
     {
+        var data = sse.Data;
+
+        // A server may name the event "error" instead of (or as well as) putting an "error" field in the JSON
+        if (string.Equals(sse.EventType, "error", StringComparison.OrdinalIgnoreCase))
+        {
+            var message = ChatMapper.TryGetServerMessage(data) ?? Truncate(data);
+            throw new EmberLlmException($"{request.Method} {request.RequestUri} reported an error mid-stream: {message}");
+        }
+
         WireChatResponse? chunk;
         try
         {
