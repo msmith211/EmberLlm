@@ -1,80 +1,165 @@
 # EmberLlm
 
-**Make local LLM servers feel native in C#. Find running servers, stream chat, and get typed, validated objects back from small models.**
+**A .NET client for local LLM servers (LM Studio, Ollama, llama.cpp, vLLM), built on Microsoft.Extensions.AI.**
 
 [![CI](https://github.com/msmith211/EmberLlm/actions/workflows/ci.yml/badge.svg)](https://github.com/msmith211/EmberLlm/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/EmberLlm.svg)](https://www.nuget.org/packages/EmberLlm)
 [![Coverage](https://img.shields.io/badge/coverage-pending-lightgrey.svg)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **Status:** in development, not yet released. Nothing below works yet. It shows the API v0.1 is being built toward. Once v0.1 is out, the API may still change before 1.0.
-
-## Why this exists
-
-If you run models on your own hardware through LM Studio, Ollama, llama.cpp or vLLM, you can already call them from .NET. The official OpenAI SDK and Microsoft.Extensions.AI handle generic chat well, and OllamaSharp covers Ollama. None of them focus on what is specific to local inference:
-
-- **Finding the server.** Which backend is running, on which port, with which models loaded?
-- **Structured output from small models.** Local models often wrap JSON in code fences, prepend `<think>` blocks or miss a field. EmberLlm cleans the output, deserializes it into your C# type, and retries with the error when it fails.
-- **Backend quirks.** Each server is slightly different. EmberLlm records real responses from each one and tests against them.
-
-EmberLlm complements those libraries rather than replacing them. It implements `IChatClient` and uses Microsoft.Extensions.AI's message types, so it drops into that ecosystem without conversion code.
+> [!NOTE]
+> **Status: pre-release.** v0.1 is in development and not yet on NuGet. Chat, streaming and model listing work today, with unit tests in CI and integration tests against a real LM Studio server. Server discovery, typed structured output and dependency injection are still being built (see [Coming next](#coming-next)). The API may change before 1.0.
 
 <!-- TODO (milestone 8): terminal GIF of discovery + streaming goes here. -->
 
+## Contents
+
+- [Why this exists](#why-this-exists)
+- [Quick start](#quick-start)
+- [What works today](#what-works-today)
+- [Coming next](#coming-next)
+- [Supported backends](#supported-backends)
+- [Design decisions](#design-decisions)
+- [Contributing](#contributing)
+
+## Why this exists
+
+If you run models on your own hardware, you can already call them from .NET: the official OpenAI SDK and Microsoft.Extensions.AI handle generic chat, and OllamaSharp covers Ollama. EmberLlm focuses on the parts that are specific to local inference.
+
+Already in place:
+
+- **Reasoning stays separate.** Thinking models' reasoning arrives as `TextReasoningContent`, not mixed into the answer text.
+- **No model name required.** If you don't name one, EmberLlm uses your configured default, then the first model the server lists.
+- **Clear errors for local setups.** "Server not running", "server returned an error" (with the server's own message) and "request timed out" are separate exception types.
+- **Timeouts suited to slow hardware.** The default request timeout is 10 minutes, and it is kept distinct from your own cancellation.
+- **Never fails silently.** Every option you set is either sent or rejected before the request goes out, and every response field is either mapped or kept in `AdditionalProperties`. See [SPEC.md, Design rules](SPEC.md#design-rules).
+
+Planned for v0.1: finding running servers automatically, and getting typed objects back from small models that wrap JSON in code fences or `<think>` blocks. A comparison with the OpenAI SDK plus Microsoft's adapter is scheduled before that work, and this section will be updated with its findings.
+
+EmberLlm complements those libraries rather than replacing them. `EmberLlmClient` *is* an `IChatClient` and uses Microsoft.Extensions.AI's message types, so it drops into that ecosystem without conversion code.
+
 ## Quick start
 
-<!-- TODO (milestone 8): replace with code copied from samples/QuickStart so it is guaranteed to compile. -->
+### Install
+
+EmberLlm is not on NuGet yet; `dotnet add package EmberLlm` will work once v0.1.0 is published. Until then, reference it from source (requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)):
 
 ```bash
-dotnet add package EmberLlm
+git clone https://github.com/msmith211/EmberLlm.git
+cd path/to/YourApp
+dotnet add reference path/to/EmberLlm/src/EmberLlm/EmberLlm.csproj
 ```
+
+### Chat and stream
+
+Start a local server (LM Studio listens on `http://localhost:1234` by default) with a model loaded, then:
 
 ```csharp
 using EmberLlm;
 
-// Find whatever is running locally (LM Studio, Ollama, llama.cpp, vLLM)
-var servers = await EmberLlmDiscovery.FindAsync();
-using var llm = new EmberLlmClient(servers[0]);
+using var llm = new EmberLlmClient("http://localhost:1234");
 
-// Stream a reply
-await foreach (string token in llm.StreamAsync("Write a haiku about garbage collection"))
+// One reply, no model name needed
+string answer = await llm.CompleteAsync("Explain Span<T> in two sentences.");
+Console.WriteLine(answer);
+
+// Stream the reply as it is generated
+await foreach (string token in llm.StreamAsync("Write a haiku about garbage collection."))
     Console.Write(token);
-
-// Get a typed object back
-CodeReview review = await llm.GetAsync<CodeReview>("Review this method: ...");
-
-public record CodeReview(string Summary, string[] Issues, int Severity);
 ```
 
-Already know the endpoint? Use `new EmberLlmClient("http://localhost:1234")`. Using dependency injection? Call `services.AddEmberLlm(o => o.BaseUrl = "http://localhost:1234")`.
+### Use it as an `IChatClient`
 
-## Features (v0.1)
+```csharp
+using EmberLlm;
+using Microsoft.Extensions.AI;
 
-- **Chat completion:** full responses, plain-text streaming, and rich streaming with token usage
-- **Model listing:** typed info from `/v1/models`
-- **Server discovery:** parallel probing of common local ports with backend fingerprinting
-- **Typed structured output:** `GetAsync<T>()` generates a JSON schema from your type, cleans and parses the reply, and retries on failure
-- **Microsoft.Extensions.AI interop:** `EmberLlmClient` *is* an `IChatClient`, so it works with any library or middleware built on that interface
+using var llm = new EmberLlmClient(new EmberLlmOptions
+{
+    BaseUrl = "http://localhost:1234",
+    DefaultModel = "qwen/qwen3-4b-thinking-2507", // optional
+});
 
-Planned for later versions: tool calling, loading and unloading models. See [ROADMAP.md](ROADMAP.md).
+ChatResponse reply = await llm.GetResponseAsync(
+    [new(ChatRole.System, "You are terse."), new(ChatRole.User, "Is 1013 prime?")],
+    new ChatOptions { Temperature = 0.2f });
+
+Console.WriteLine(reply.Text); // the answer only
+
+foreach (var reasoning in reply.Messages.SelectMany(m => m.Contents).OfType<TextReasoningContent>())
+    Console.WriteLine($"[reasoning] {reasoning.Text}");
+
+Console.WriteLine($"Answered by {reply.ModelId} using {reply.Usage?.OutputTokenCount} output tokens");
+```
+
+### List models and handle errors
+
+```csharp
+try
+{
+    foreach (ModelInfo model in await llm.ListModelsAsync())
+        Console.WriteLine(model.Id);
+}
+catch (EmberLlmConnectionException)
+{
+    Console.WriteLine("No server is running at that address.");
+}
+catch (EmberLlmHttpException ex)
+{
+    Console.WriteLine($"Server returned {(int)ex.StatusCode}: {ex.ServerMessage}");
+}
+```
+
+## What works today
+
+| Area | What you get |
+| --- | --- |
+| Chat | `GetResponseAsync` returns a `ChatResponse` with text, reasoning, finish reason and token usage. `CompleteAsync(string)` is the one-line version. |
+| Streaming | `GetStreamingResponseAsync` yields `ChatResponseUpdate`s, with usage in the final update. `StreamAsync(string)` yields just the reply text. |
+| Options | `ChatOptions` model, temperature, max output tokens, top-p, top-k, stop sequences, seed, frequency and presence penalties, instructions, reasoning effort and response format (text, JSON, JSON schema). `AdditionalProperties` pass through as extra request fields. |
+| Unsupported options | Options EmberLlm can't honor, such as tools (planned for v0.2), throw `NotSupportedException` before any request is made. |
+| Model selection | `ChatOptions.ModelId`, then `EmberLlmOptions.DefaultModel`, then the server's first listed model ([decision 0002](docs/decisions/0002-model-selection-order.md)). |
+| Model listing | `ListModelsAsync()` returns a `ModelList` of `ModelInfo` (id, owner, creation time, plus server-specific fields). |
+| Errors | `EmberLlmHttpException` (status code and the server's message), `EmberLlmConnectionException`, `EmberLlmTimeoutException`, `NoModelAvailableException` and `ModelMismatchException`, all deriving from `EmberLlmException` ([decision 0003](docs/decisions/0003-exception-model.md)). |
+| Strict model matching | Opt-in `EmberLlmOptions.StrictModelMatching` throws when a server answers with a different model than requested ([decision 0008](docs/decisions/0008-model-substitution-and-strict-matching.md)). |
+| Interop | `GetService` returns `ChatClientMetadata`, so Microsoft.Extensions.AI middleware and libraries built on `IChatClient` work unchanged. |
+
+Unit tests run on Linux and Windows in CI. Integration tests are opt-in and have passed against LM Studio with gemma-4-12b and qwen3-4b-thinking. See [CHANGELOG.md](CHANGELOG.md) for the full list.
+
+## Coming next
+
+These are **not available yet**. Names may change before they ship.
+
+| Feature | Planned API | Milestone |
+| --- | --- | --- |
+| Server discovery | `EmberLlmDiscovery.FindAsync()` probes common local ports and identifies the backend | 5 (in progress) |
+| Typed structured output | `GetAsync<T>()` cleans small-model output, deserializes into your type, and retries on failure | 6 |
+| Dependency injection | `services.AddEmberLlm(...)` registers `EmberLlmClient` and `IChatClient` | 7 |
+| NuGet package | `dotnet add package EmberLlm` | 8 (v0.1.0 release) |
+
+Tool calling and loading or unloading models are planned for v0.2. See [ROADMAP.md](ROADMAP.md) for what is planned and what is out of scope.
 
 ## Supported backends
 
-| Backend | Default port | Notes |
-| --- | --- | --- |
-| LM Studio | 1234 | Lists loaded models. In testing, with a single model loaded, a request for any other model name was answered by the loaded model instead of failing; with two loaded, it returned an error. `response.ModelId` shows which model answered; set `StrictModelMatching = true` to make a mismatch throw. |
-| Ollama | 11434 | Set `DefaultModel`; `/v1/models` lists installed models, not just loaded ones |
-| llama.cpp server | 8080 | |
-| vLLM | 8000 | |
-| Any OpenAI-compatible server | (configure) | Detected as `Generic`; structured output uses a prompt-based fallback |
+EmberLlm talks to any server with an OpenAI-compatible `/v1/chat/completions` endpoint. Only LM Studio has been tested against a real server so far.
+
+| Backend | Default port | Tested | Notes |
+| --- | --- | --- | --- |
+| LM Studio | 1234 | Yes | Lists loaded models. LM Studio may answer a request for an unknown model with whichever model is loaded instead of failing (seen with one model loaded; with two loaded it returned an error). Check `reply.ModelId`, or set `StrictModelMatching = true` to make a mismatch throw. |
+| Ollama | 11434 | Not yet | Set `DefaultModel`: Ollama's `/v1/models` lists every installed model, not just loaded ones, so picking the first could trigger a model load. |
+| llama.cpp server | 8080 | Not yet | |
+| vLLM | 8000 | Not yet | |
+| Other OpenAI-compatible servers | (configure) | Not yet | |
+
+Bug reports and recorded responses from untested backends are especially welcome; see [CONTRIBUTING.md](CONTRIBUTING.md#recorded-fixtures).
 
 ## Design decisions
 
-Significant design choices are recorded in [docs/decisions](docs/decisions/), for example why EmberLlm reuses Microsoft.Extensions.AI types and how it picks a model when you don't specify one.
+Significant choices are recorded as short notes in [docs/decisions](docs/decisions/), for example why EmberLlm reuses Microsoft.Extensions.AI types, why `EmberLlmClient` implements `IChatClient` directly, and how it picks a model when you don't name one.
 
 ## Contributing
 
-Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports and focused pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test and fixture instructions.
 
 ## License
 
