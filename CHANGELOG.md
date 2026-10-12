@@ -20,6 +20,7 @@ Nothing released yet. v0.1.0 is in development; see [ROADMAP.md](ROADMAP.md).
 
 ### Fixed
 
+- Streaming: a server-sent event named `error` now throws even if its JSON has no `error` field, and other event names are kept in the update's `AdditionalProperties` as `sse.event` instead of being ignored.
 - Data is no longer dropped silently: unsupported or conflicting message data throws, and a response with more than one choice throws instead of being truncated. See [decision 0006](docs/decisions/0006-fix-silent-data-drops.md).
 
 [Unreleased]: https://github.com/msmith211/EmberLlm/commits/main
