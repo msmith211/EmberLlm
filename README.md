@@ -62,7 +62,7 @@ Planned for later versions: tool calling, loading and unloading models. See [ROA
 
 | Backend | Default port | Notes |
 | --- | --- | --- |
-| LM Studio | 1234 | |
+| LM Studio | 1234 | Depending on its settings, may answer a request for a model that isn't loaded with the loaded model instead of an error. `response.ModelId` shows which model answered; set `StrictModelMatching = true` to make a mismatch throw. |
 | Ollama | 11434 | Set `DefaultModel`; `/v1/models` lists installed models, not just loaded ones |
 | llama.cpp server | 8080 | |
 | vLLM | 8000 | |
