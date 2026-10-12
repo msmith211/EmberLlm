@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using EmberLlm.Chat;
+using EmberLlm.Models;
 using Microsoft.Extensions.AI;
 
 namespace EmberLlm;
@@ -171,6 +172,23 @@ public sealed class EmberLlmClient : IChatClient
     }
 
     /// <summary>
+    /// Lists the models the server offers at <c>/v1/models</c>, in the server's order. Each call asks the
+    /// server again; nothing is cached. Which models appear depends on the server: LM Studio lists loaded
+    /// models, while Ollama lists every installed one.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The models. Fields EmberLlm doesn't model are kept in <c>AdditionalProperties</c>.</returns>
+    /// <exception cref="EmberLlmHttpException">The server returned a non-success status code.</exception>
+    /// <exception cref="EmberLlmConnectionException">The server could not be reached.</exception>
+    /// <exception cref="EmberLlmTimeoutException">The request exceeded <see cref="EmberLlmOptions.RequestTimeout"/>.</exception>
+    /// <exception cref="EmberLlmException">The response isn't an OpenAI-style model list, or lists a model without an id.</exception>
+    public Task<ModelList> ListModelsAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return ListModelsCoreAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Returns <see cref="ChatClientMetadata"/> (provider "EmberLlm", the server's API URL and the default
     /// model) when asked for it, or this client when asked for a type it implements; otherwise <see langword="null"/>.
     /// </summary>
@@ -212,6 +230,13 @@ public sealed class EmberLlmClient : IChatClient
         }
     }
 
+    private async Task<ModelList> ListModelsCoreAsync(CancellationToken cancellationToken)
+    {
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, _modelsUri);
+        var wire = await SendAsync(httpRequest, WireJsonContext.Default.WireModelList, cancellationToken).ConfigureAwait(false);
+        return ModelMapper.ToModelList(wire, _modelsUri);
+    }
+
     /// <summary>
     /// Picks the model for a request: the request's model, then the configured default, then the
     /// first model the server lists (fetched once and cached for the lifetime of the client).
@@ -241,13 +266,14 @@ public sealed class EmberLlmClient : IChatClient
                 return fetchedMeanwhile;
             }
 
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, _modelsUri);
-            var models = await SendAsync(httpRequest, WireJsonContext.Default.WireModelList, cancellationToken).ConfigureAwait(false);
-
-            _firstListedModel = models.Data?.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.Id))?.Id
-                ?? throw new NoModelAvailableException(
+            var models = await ListModelsCoreAsync(cancellationToken).ConfigureAwait(false);
+            if (models.Count == 0)
+            {
+                throw new NoModelAvailableException(
                     $"No model was specified and the server at {_modelsUri} lists no models. Set ChatOptions.ModelId or EmberLlmOptions.DefaultModel, or load a model on the server.");
+            }
 
+            _firstListedModel = models[0].Id;
             return _firstListedModel;
         }
         finally
