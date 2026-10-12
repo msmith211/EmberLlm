@@ -7,14 +7,27 @@ namespace EmberLlm.Chat;
 /// <summary>
 /// Converts between Microsoft.Extensions.AI types and the OpenAI-compatible wire format.
 /// </summary>
+/// <remarks>
+/// Follows decision 0006, "never fail silently": everything a caller asks for is either sent or
+/// rejected with an exception, and nothing the server sends is discarded.
+/// </remarks>
 internal static class ChatMapper
 {
+    // Message fields EmberLlm sets itself; AdditionalProperties may not override them
+    private static readonly HashSet<string> MappedMessageFields = ["role", "content", "name"];
+
     public static WireChatRequest ToWire(ChatRequest request, string model, bool stream)
     {
         var messages = new List<WireMessage>(request.Messages.Count);
         foreach (var message in request.Messages)
         {
-            messages.Add(new WireMessage { Role = message.Role.Value, Content = GetText(message) });
+            messages.Add(new WireMessage
+            {
+                Role = message.Role.Value,
+                Content = GetText(message),
+                Name = message.AuthorName,
+                ExtensionData = ToExtensionData(message),
+            });
         }
 
         return new WireChatRequest
@@ -30,7 +43,7 @@ internal static class ChatMapper
 
     public static ChatResponseUpdate ToUpdate(WireChatResponse chunk)
     {
-        var choice = chunk.Choices?.FirstOrDefault();
+        var choice = GetOnlyChoice(chunk.Choices, allowNone: true);
         var delta = choice?.Delta;
 
         var contents = new List<AIContent>();
@@ -52,21 +65,26 @@ internal static class ChatMapper
 
         var role = string.IsNullOrEmpty(delta?.Role) ? (ChatRole?)null : new ChatRole(delta.Role);
 
+        // An update has a single AdditionalProperties, so unmodeled chunk, choice and delta fields share it
+        var extras = ToAdditionalProperties(chunk.ExtensionData);
+        extras = MergeInto(extras, choice?.ExtensionData, "choice.");
+        extras = MergeInto(extras, delta?.ExtensionData, "delta.");
+        extras = AddPrefixed(extras, chunk.Usage?.ExtensionData, "usage.");
+
         return new ChatResponseUpdate(role, contents)
         {
             ResponseId = chunk.Id,
             ModelId = chunk.Model,
             CreatedAt = chunk.Created is { } seconds ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null,
             FinishReason = ToFinishReason(choice?.FinishReason),
-            AdditionalProperties = ToAdditionalProperties(chunk.ExtensionData),
+            AdditionalProperties = extras,
             RawRepresentation = chunk,
         };
     }
 
     public static ChatResponse ToChatResponse(WireChatResponse wire)
     {
-        var choice = wire.Choices?.FirstOrDefault()
-            ?? throw new EmberLlmException("The server returned a chat completion with no choices.");
+        var choice = GetOnlyChoice(wire.Choices, allowNone: false)!;
 
         var contents = new List<AIContent>();
         if (!string.IsNullOrEmpty(choice.Message?.ReasoningContent))
@@ -80,17 +98,49 @@ internal static class ChatMapper
         }
 
         var role = string.IsNullOrEmpty(choice.Message?.Role) ? ChatRole.Assistant : new ChatRole(choice.Message.Role);
+        var message = new ChatMessage(role, contents)
+        {
+            AuthorName = choice.Message?.Name,
+            AdditionalProperties = ToAdditionalProperties(choice.Message?.ExtensionData),
+        };
 
-        return new ChatResponse(new ChatMessage(role, contents))
+        return new ChatResponse(message)
         {
             ResponseId = wire.Id,
             ModelId = wire.Model,
             CreatedAt = wire.Created is { } seconds ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null,
             FinishReason = ToFinishReason(choice.FinishReason),
             Usage = ToUsage(wire.Usage),
-            AdditionalProperties = ToAdditionalProperties(wire.ExtensionData),
+            AdditionalProperties = AddPrefixed(
+                MergeInto(ToAdditionalProperties(wire.ExtensionData), choice.ExtensionData, "choice."),
+                wire.Usage?.ExtensionData,
+                "usage."),
             RawRepresentation = wire,
         };
+    }
+
+    /// <summary>
+    /// Returns the single choice in a response. EmberLlm requests one completion, and
+    /// <see cref="ChatResponse"/> has no way to represent alternatives, so more than one is an error
+    /// rather than something to silently truncate.
+    /// </summary>
+    private static WireChoice? GetOnlyChoice(IReadOnlyList<WireChoice>? choices, bool allowNone)
+    {
+        if (choices is null || choices.Count == 0)
+        {
+            // Streaming: the final usage chunk legitimately has no choices
+            return allowNone
+                ? null
+                : throw new EmberLlmException("The server returned a chat completion with no choices.");
+        }
+
+        if (choices.Count > 1 || choices[0].Index != 0)
+        {
+            throw new EmberLlmException(
+                $"The server returned more than one choice (choices: {choices.Count}, first index: {choices[0].Index}). EmberLlm requests a single completion and cannot represent alternatives.");
+        }
+
+        return choices[0];
     }
 
     public static ChatFinishReason? ToFinishReason(string? value) => value switch
@@ -203,5 +253,78 @@ internal static class ChatMapper
         }
 
         return properties;
+    }
+
+    /// <summary>
+    /// Converts a message's <see cref="ChatMessage.AdditionalProperties"/> into extra JSON fields on that
+    /// message. Values are serialized with Microsoft.Extensions.AI's default JSON options; a value that
+    /// can't be serialized throws instead of being dropped.
+    /// </summary>
+    private static Dictionary<string, JsonElement>? ToExtensionData(ChatMessage message)
+    {
+        if (message.AdditionalProperties is not { Count: > 0 } properties)
+        {
+            return null;
+        }
+
+        var extensionData = new Dictionary<string, JsonElement>(properties.Count, StringComparer.Ordinal);
+        foreach (var (key, value) in properties)
+        {
+            if (MappedMessageFields.Contains(key))
+            {
+                throw new ArgumentException(
+                    $"A {message.Role} message's AdditionalProperties contains \"{key}\", which EmberLlm already sets from the message itself. Use the matching ChatMessage property instead.",
+                    nameof(message));
+            }
+
+            extensionData[key] = value switch
+            {
+                JsonElement element => element,
+                null => JsonSerializer.SerializeToElement<object?>(null, AIJsonUtilities.DefaultOptions),
+                _ => JsonSerializer.SerializeToElement(value, AIJsonUtilities.DefaultOptions.GetTypeInfo(value.GetType())),
+            };
+        }
+
+        return extensionData;
+    }
+
+    /// <summary>
+    /// Adds <paramref name="source"/> entries to <paramref name="target"/>. A key that already exists is
+    /// stored with <paramref name="prefix"/> instead, so neither value is lost.
+    /// </summary>
+    private static AdditionalPropertiesDictionary? MergeInto(AdditionalPropertiesDictionary? target, Dictionary<string, JsonElement>? source, string prefix)
+    {
+        if (source is null || source.Count == 0)
+        {
+            return target;
+        }
+
+        target ??= [];
+        foreach (var (key, value) in source)
+        {
+            target[target.ContainsKey(key) ? prefix + key : key] = value;
+        }
+
+        return target;
+    }
+
+    /// <summary>
+    /// Adds <paramref name="source"/> entries to <paramref name="target"/>, always under
+    /// <paramref name="prefix"/>, so their origin is clear (for example <c>usage.prompt_tokens_details</c>).
+    /// </summary>
+    private static AdditionalPropertiesDictionary? AddPrefixed(AdditionalPropertiesDictionary? target, Dictionary<string, JsonElement>? source, string prefix)
+    {
+        if (source is null || source.Count == 0)
+        {
+            return target;
+        }
+
+        target ??= [];
+        foreach (var (key, value) in source)
+        {
+            target[prefix + key] = value;
+        }
+
+        return target;
     }
 }
