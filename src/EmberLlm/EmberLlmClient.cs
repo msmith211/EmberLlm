@@ -50,6 +50,16 @@ public sealed class EmberLlmClient : IChatClient
     }
 
     /// <summary>
+    /// Creates a client for a server found by <see cref="EmberLlmDiscovery"/>, with default options.
+    /// The client creates and owns its own <see cref="HttpClient"/>.
+    /// </summary>
+    /// <param name="server">The discovered server.</param>
+    public EmberLlmClient(DiscoveredServer server)
+        : this(new EmberLlmOptions { BaseUrl = (server ?? throw new ArgumentNullException(nameof(server))).BaseUrl.ToString() })
+    {
+    }
+
+    /// <summary>
     /// Creates a client that sends requests through <paramref name="httpClient"/>. The caller keeps
     /// ownership of the <see cref="HttpClient"/>; disposing this client does not dispose it.
     /// </summary>
@@ -69,7 +79,7 @@ public sealed class EmberLlmClient : IChatClient
         }
 
         // Options are copied so later changes to the options object do not affect this client
-        var apiBase = GetApiBase(options.BaseUrl);
+        var apiBase = ServerUrls.GetApiBase(options.BaseUrl, nameof(options));
         _chatCompletionsUri = new Uri(apiBase, "chat/completions");
         _modelsUri = new Uri(apiBase, "models");
         _defaultModel = string.IsNullOrWhiteSpace(options.DefaultModel) ? null : options.DefaultModel;
@@ -529,25 +539,6 @@ public sealed class EmberLlmClient : IChatClient
             statusCode,
             serverMessage,
             body);
-    }
-
-    private static Uri GetApiBase(string? baseUrl)
-    {
-        if (string.IsNullOrWhiteSpace(baseUrl)
-            || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-        {
-            throw new ArgumentException($"BaseUrl must be an absolute http or https URL, but was '{baseUrl}'.", nameof(baseUrl));
-        }
-
-        // Accept both http://host:port and http://host:port/v1, with or without a trailing slash
-        var path = uri.AbsolutePath.TrimEnd('/');
-        if (!path.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-        {
-            path += "/v1";
-        }
-
-        return new UriBuilder(uri) { Path = path + "/", Query = string.Empty, Fragment = string.Empty }.Uri;
     }
 
     private static string Truncate(string text) =>
