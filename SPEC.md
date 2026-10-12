@@ -124,9 +124,9 @@ Every `ChatOptions` setting with an OpenAI-compatible equivalent is mapped:
 | `FrequencyPenalty` | `frequency_penalty` |
 | `PresencePenalty` | `presence_penalty` |
 | `Instructions` | A system message added before the conversation (chat completions has no `instructions` field) |
-| `TopK` | `top_k` *(proposed, [0007](docs/decisions/0007-map-topk-reasoning-and-response-format.md))* |
-| `Reasoning.Effort` | `reasoning_effort`: `none`, `low`, `medium`, `high`; `ExtraHigh` throws *(proposed, 0007)* |
-| `ResponseFormat` | `response_format`: `text`, `json_object`, or `json_schema` *(proposed, 0007)* |
+| `TopK` | `top_k` ([0007](docs/decisions/0007-map-topk-reasoning-and-response-format.md)) |
+| `Reasoning.Effort` | `reasoning_effort`: `none`, `low`, `medium`, `high`; `ExtraHigh` throws (0007) |
+| `ResponseFormat` | `response_format`: `text`, `json_object`, or `json_schema` (0007) |
 | `AdditionalProperties` | Passed through as extra top-level request fields. A key EmberLlm already sets for the request throws `ArgumentException`. |
 
 Anything else throws `NotSupportedException`, with a message naming the option and whether support is planned: `Tools`, `ToolMode` (required modes) and `AllowMultipleToolCalls` (v0.2), `ConversationId`, `AllowBackgroundResponses`, `ContinuationToken`, `RawRepresentationFactory` and `Reasoning.Output`. Settings that ask for nothing EmberLlm can't do are accepted: an empty tool list, tool mode `Auto` or `None`, and `false` for the boolean switches.
@@ -179,7 +179,7 @@ services.AddEmberLlm(o => o.BaseUrl = "http://localhost:1234");
 
 Constructors: `EmberLlmClient(string baseUrl)`, `EmberLlmClient(EmberLlmOptions options)`, `EmberLlmClient(DiscoveredServer server)`, and `EmberLlmClient(HttpClient httpClient, EmberLlmOptions options)`. The options-only overload lets callers set `DefaultModel` or `RequestTimeout` without supplying an `HttpClient`.
 
-Exceptions (see `docs/decisions/0003-exception-model.md`): all derive from `EmberLlmException`. `EmberLlmHttpException` (non-success status, with `StatusCode`, `ServerMessage`, `ResponseBody`), `EmberLlmConnectionException` (server unreachable), `EmberLlmTimeoutException`, `NoModelAvailableException`, and `StructuredOutputException` (milestone 6). Caller cancellation throws `OperationCanceledException` with the caller's token. Options, message content or message fields that EmberLlm can't send throw the standard `NotSupportedException` or `ArgumentException` before any chat request goes out (see Design rules). `EmberLlmDiscovery.FindAsync` has an overload that accepts an `HttpClient`.
+Exceptions (see `docs/decisions/0003-exception-model.md`): all derive from `EmberLlmException`. `EmberLlmHttpException` (non-success status, with `StatusCode`, `ServerMessage`, `ResponseBody`), `EmberLlmConnectionException` (server unreachable), `EmberLlmTimeoutException`, `NoModelAvailableException`, `ModelMismatchException` (only with `EmberLlmOptions.StrictModelMatching`, see [0008](docs/decisions/0008-model-substitution-and-strict-matching.md)), and `StructuredOutputException` (milestone 6). Caller cancellation throws `OperationCanceledException` with the caller's token. Options, message content or message fields that EmberLlm can't send throw the standard `NotSupportedException` or `ArgumentException` before any chat request goes out (see Design rules). `EmberLlmDiscovery.FindAsync` has an overload that accepts an `HttpClient`.
 
 ### Model selection
 
@@ -189,6 +189,8 @@ When a call does not name a model, resolve it in this order:
 2. `EmberLlmOptions.DefaultModel`, if set
 3. The first model returned by `/v1/models`, fetched once and cached for the lifetime of the client
 4. Otherwise throw `NoModelAvailableException`
+
+The reply's `ModelId` shows which model actually answered. Some servers substitute the loaded model for an unknown one; with `StrictModelMatching` on, a mismatch throws `ModelMismatchException` ([0008](docs/decisions/0008-model-substitution-and-strict-matching.md)).
 
 Document in the README that on Ollama, `/v1/models` lists every installed model, not just loaded ones, so option 3 may trigger a model load. Ollama users should set `DefaultModel`.
 

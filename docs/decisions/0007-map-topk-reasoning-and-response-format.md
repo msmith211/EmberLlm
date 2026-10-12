@@ -1,6 +1,6 @@
 # 0007. Map TopK, reasoning effort and response format
 
-- Status: Proposed (awaiting Michael's decision)
+- Status: Accepted (Michael, 2026-10-12)
 - Date: 2026-10-12
 
 ## Context
@@ -11,7 +11,7 @@ Decision 0005 maps every OpenAI-compatible `ChatOptions` setting and rejects the
 - **`Reasoning`** has an effort level (`None` to `ExtraHigh`) and an `Output` setting. OpenAI-compatible servers accept `reasoning_effort` with values up to `high`; nothing controls whether reasoning is returned.
 - **`ResponseFormat`** (text, JSON, JSON schema) is OpenAI-compatible, but the spec had deferred it to milestone 6 (structured output).
 
-## Decision (proposed)
+## Decision
 
 - **`TopK`** is sent as `top_k`. If a server ignores it, that is the server's behavior; EmberLlm sent what was asked.
 - **`Reasoning.Effort`** is sent as `reasoning_effort` for `None`, `Low`, `Medium` and `High`. `ExtraHigh` has no OpenAI-compatible value and throws `NotSupportedException`. **`Reasoning.Output`** can't be honored and throws.
