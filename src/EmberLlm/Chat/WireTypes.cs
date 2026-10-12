@@ -33,8 +33,15 @@ internal sealed class WireMessage
 
     public string? Content { get; init; }
 
+    public string? Name { get; init; }
+
     // DeepSeek-style reasoning field, sent by some backends for thinking models
     public string? ReasoningContent { get; init; }
+
+    // Outgoing: ChatMessage.AdditionalProperties, passed through as extra fields.
+    // Incoming: any message fields EmberLlm doesn't model.
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 // Used for both full responses and streaming chunks; chunks carry Delta instead of Message
@@ -65,6 +72,9 @@ internal sealed class WireChoice
     public WireMessage? Delta { get; init; }
 
     public string? FinishReason { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 internal sealed class WireUsage
@@ -74,6 +84,10 @@ internal sealed class WireUsage
     public long? CompletionTokens { get; init; }
 
     public long? TotalTokens { get; init; }
+
+    // For example prompt_tokens_details or completion_tokens_details
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 internal sealed class WireModelList

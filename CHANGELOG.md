@@ -15,5 +15,11 @@ Nothing released yet. v0.1.0 is in development; see [ROADMAP.md](ROADMAP.md).
 - `EmberLlmOptions` with `BaseUrl`, `DefaultModel` and `RequestTimeout` (default 10 minutes).
 - Automatic model selection when a request names no model: `DefaultModel`, then the server's first listed model.
 - Exceptions: `EmberLlmHttpException` (with the server's error message), `EmberLlmConnectionException`, `EmberLlmTimeoutException` and `NoModelAvailableException`, all deriving from `EmberLlmException`.
+- Message `AuthorName` is sent as `name`, and message `AdditionalProperties` are passed through as extra fields.
+- Response fields EmberLlm doesn't model, including those inside messages, choices and `usage`, are kept in `AdditionalProperties`.
+
+### Fixed
+
+- Data is no longer dropped silently: unsupported or conflicting message data throws, and a response with more than one choice throws instead of being truncated. See [decision 0006](docs/decisions/0006-fix-silent-data-drops.md).
 
 [Unreleased]: https://github.com/msmith211/EmberLlm/commits/main
