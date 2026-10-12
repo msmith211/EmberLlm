@@ -123,9 +123,13 @@ Every `ChatOptions` setting with an OpenAI-compatible equivalent is mapped:
 | `Seed` | `seed` |
 | `FrequencyPenalty` | `frequency_penalty` |
 | `PresencePenalty` | `presence_penalty` |
-| `AdditionalProperties` | Passed through as extra top-level request fields (for backend-specific parameters such as `top_k`) |
+| `Instructions` | A system message added before the conversation (chat completions has no `instructions` field) |
+| `TopK` | `top_k` *(proposed, [0007](docs/decisions/0007-map-topk-reasoning-and-response-format.md))* |
+| `Reasoning.Effort` | `reasoning_effort`: `none`, `low`, `medium`, `high`; `ExtraHigh` throws *(proposed, 0007)* |
+| `ResponseFormat` | `response_format`: `text`, `json_object`, or `json_schema` *(proposed, 0007)* |
+| `AdditionalProperties` | Passed through as extra top-level request fields. A key EmberLlm already sets for the request throws `ArgumentException`. |
 
-Anything else throws `NotSupportedException`, with a message naming the option and whether support is planned: `Tools` and `ToolMode` (v0.2), `ResponseFormat` (milestone 6), and any option with no OpenAI-compatible equivalent.
+Anything else throws `NotSupportedException`, with a message naming the option and whether support is planned: `Tools`, `ToolMode` (required modes) and `AllowMultipleToolCalls` (v0.2), `ConversationId`, `AllowBackgroundResponses`, `ContinuationToken`, `RawRepresentationFactory` and `Reasoning.Output`. Settings that ask for nothing EmberLlm can't do are accepted: an empty tool list, tool mode `Auto` or `None`, and `false` for the boolean switches.
 
 ## Public API sketch
 

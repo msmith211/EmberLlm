@@ -10,6 +10,7 @@ Short records of significant design choices: what was decided, why, and what els
 | [0004](0004-streaming-timeout-scope.md) | RequestTimeout bounds the whole stream | Accepted |
 | [0005](0005-emberllmclient-implements-ichatclient.md) | Make EmberLlmClient an IChatClient instead of wrapping one | Accepted |
 | [0006](0006-fix-silent-data-drops.md) | Fix silent data drops in the chat mapping | Accepted |
+| [0007](0007-map-topk-reasoning-and-response-format.md) | Map TopK, reasoning effort and response format | **Proposed** |
 
 ## Writing a new note
 
