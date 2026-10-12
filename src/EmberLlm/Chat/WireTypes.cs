@@ -8,7 +8,8 @@ namespace EmberLlm.Chat;
 
 internal sealed class WireChatRequest
 {
-    public required string Model { get; init; }
+    // Set after option validation, once model selection has run (validation must come first; see decision 0006)
+    public string? Model { get; set; }
 
     public required IReadOnlyList<WireMessage> Messages { get; init; }
 
@@ -16,9 +17,43 @@ internal sealed class WireChatRequest
 
     public int? MaxTokens { get; init; }
 
+    public float? TopP { get; init; }
+
+    // Not in OpenAI's own API, but accepted by llama.cpp, vLLM and LM Studio
+    public int? TopK { get; init; }
+
+    public IReadOnlyList<string>? Stop { get; init; }
+
+    public long? Seed { get; init; }
+
+    public float? FrequencyPenalty { get; init; }
+
+    public float? PresencePenalty { get; init; }
+
+    public string? ReasoningEffort { get; init; }
+
+    public WireResponseFormat? ResponseFormat { get; init; }
+
     public bool Stream { get; init; }
 
     public WireStreamOptions? StreamOptions { get; init; }
+}
+
+internal sealed class WireResponseFormat
+{
+    // "text", "json_object" or "json_schema"
+    public required string Type { get; init; }
+
+    public WireJsonSchema? JsonSchema { get; init; }
+}
+
+internal sealed class WireJsonSchema
+{
+    public required string Name { get; init; }
+
+    public string? Description { get; init; }
+
+    public JsonElement Schema { get; init; }
 }
 
 internal sealed class WireStreamOptions

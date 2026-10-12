@@ -36,6 +36,21 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
         return this;
     }
 
+    /// <summary>
+    /// Signals <paramref name="arrived"/> when the request comes in, then waits for <paramref name="release"/>
+    /// before answering with <paramref name="json"/>. Lets a test hold a request "in flight".
+    /// </summary>
+    public FakeHttpHandler RespondJsonWhenReleased(string json, TaskCompletionSource arrived, Task release)
+    {
+        _responses.Enqueue(async cancellationToken =>
+        {
+            arrived.TrySetResult();
+            await release.WaitAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        });
+        return this;
+    }
+
     /// <summary>Never answers; completes only when the request is cancelled.</summary>
     public FakeHttpHandler Hang()
     {
@@ -56,9 +71,16 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-        Requests.Add(new RecordedRequest(request.Method, request.RequestUri!, body));
 
-        if (!_responses.TryDequeue(out var respond))
+        // Locked because concurrency tests send requests from several tasks at once
+        Func<CancellationToken, Task<HttpResponseMessage>>? respond;
+        lock (_responses)
+        {
+            Requests.Add(new RecordedRequest(request.Method, request.RequestUri!, body));
+            _responses.TryDequeue(out respond);
+        }
+
+        if (respond is null)
         {
             throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
         }

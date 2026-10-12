@@ -4,11 +4,14 @@ Short records of significant design choices: what was decided, why, and what els
 
 | # | Decision | Status |
 | --- | --- | --- |
-| [0001](0001-reuse-microsoft-extensions-ai-types.md) | Reuse Microsoft.Extensions.AI types for messages and responses | Accepted |
+| [0001](0001-reuse-microsoft-extensions-ai-types.md) | Reuse Microsoft.Extensions.AI types for messages and responses | Accepted; `ChatRequest` part superseded by 0005 |
 | [0002](0002-model-selection-order.md) | Resolve the model from request, then default, then the server's first listed model | Accepted |
 | [0003](0003-exception-model.md) | Separate exception types for HTTP errors, unreachable servers, timeouts and cancellation | Accepted |
 | [0004](0004-streaming-timeout-scope.md) | RequestTimeout bounds the whole stream | Accepted |
+| [0005](0005-emberllmclient-implements-ichatclient.md) | Make EmberLlmClient an IChatClient instead of wrapping one | Accepted |
 | [0006](0006-fix-silent-data-drops.md) | Fix silent data drops in the chat mapping | Accepted |
+| [0007](0007-map-topk-reasoning-and-response-format.md) | Map TopK, reasoning effort and response format | Accepted |
+| [0008](0008-model-substitution-and-strict-matching.md) | Report model substitution, with opt-in strict matching | Accepted |
 
 ## Writing a new note
 

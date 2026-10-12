@@ -54,7 +54,7 @@ Already know the endpoint? Use `new EmberLlmClient("http://localhost:1234")`. Us
 - **Model listing:** typed info from `/v1/models`
 - **Server discovery:** parallel probing of common local ports with backend fingerprinting
 - **Typed structured output:** `GetAsync<T>()` generates a JSON schema from your type, cleans and parses the reply, and retries on failure
-- **Microsoft.Extensions.AI interop:** `llm.AsChatClient()` returns an `IChatClient`
+- **Microsoft.Extensions.AI interop:** `EmberLlmClient` *is* an `IChatClient`, so it works with any library or middleware built on that interface
 
 Planned for later versions: tool calling, loading and unloading models. See [ROADMAP.md](ROADMAP.md).
 
@@ -62,7 +62,7 @@ Planned for later versions: tool calling, loading and unloading models. See [ROA
 
 | Backend | Default port | Notes |
 | --- | --- | --- |
-| LM Studio | 1234 | |
+| LM Studio | 1234 | Depending on its settings, may answer a request for a model that isn't loaded with the loaded model instead of an error. `response.ModelId` shows which model answered; set `StrictModelMatching = true` to make a mismatch throw. |
 | Ollama | 11434 | Set `DefaultModel`; `/v1/models` lists installed models, not just loaded ones |
 | llama.cpp server | 8080 | |
 | vLLM | 8000 | |

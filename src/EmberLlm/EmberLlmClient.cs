@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using EmberLlm.Chat;
 using Microsoft.Extensions.AI;
@@ -9,9 +10,10 @@ namespace EmberLlm;
 
 /// <summary>
 /// A client for a local LLM server that exposes an OpenAI-compatible API
-/// (LM Studio, Ollama, llama.cpp server, vLLM and others).
+/// (LM Studio, Ollama, llama.cpp server, vLLM and others). It is a Microsoft.Extensions.AI
+/// <see cref="IChatClient"/>, so it works anywhere that interface is accepted.
 /// </summary>
-public sealed class EmberLlmClient : IDisposable
+public sealed class EmberLlmClient : IChatClient
 {
     private const int MaxBodyLengthInMessage = 500;
 
@@ -21,6 +23,8 @@ public sealed class EmberLlmClient : IDisposable
     private readonly Uri _modelsUri;
     private readonly string? _defaultModel;
     private readonly TimeSpan _requestTimeout;
+    private readonly ChatClientMetadata _metadata;
+    private readonly bool _strictModelMatching;
     private readonly SemaphoreSlim _modelLock = new(1, 1);
     private volatile string? _firstListedModel;
     private bool _disposed;
@@ -69,6 +73,8 @@ public sealed class EmberLlmClient : IDisposable
         _modelsUri = new Uri(apiBase, "models");
         _defaultModel = string.IsNullOrWhiteSpace(options.DefaultModel) ? null : options.DefaultModel;
         _requestTimeout = options.RequestTimeout;
+        _strictModelMatching = options.StrictModelMatching;
+        _metadata = new ChatClientMetadata(providerName: "EmberLlm", providerUri: apiBase, defaultModelId: _defaultModel);
 
         _ownsHttpClient = httpClient is null;
         _http = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
@@ -84,30 +90,8 @@ public sealed class EmberLlmClient : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
 
-        var response = await ChatAsync(new ChatRequest { Messages = [new(ChatRole.User, prompt)] }, cancellationToken).ConfigureAwait(false);
+        var response = await GetResponseAsync([new(ChatRole.User, prompt)], options: null, cancellationToken).ConfigureAwait(false);
         return response.Text;
-    }
-
-    /// <summary>
-    /// Sends a chat completion request and returns the full response, including token usage and finish reason.
-    /// </summary>
-    /// <param name="request">The request. Must contain at least one message.</param>
-    /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The server's response.</returns>
-    /// <exception cref="EmberLlmHttpException">The server returned a non-success status code.</exception>
-    /// <exception cref="EmberLlmConnectionException">The server could not be reached.</exception>
-    /// <exception cref="EmberLlmTimeoutException">The request exceeded <see cref="EmberLlmOptions.RequestTimeout"/>.</exception>
-    /// <exception cref="NoModelAvailableException">No model was specified and the server lists none.</exception>
-    public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
-    {
-        ValidateChatRequest(request);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var model = await ResolveModelAsync(request.Model, cancellationToken).ConfigureAwait(false);
-        using var httpRequest = CreateChatRequestMessage(request, model, stream: false);
-
-        var wire = await SendAsync(httpRequest, WireJsonContext.Default.WireChatResponse, cancellationToken).ConfigureAwait(false);
-        return ChatMapper.ToChatResponse(wire);
     }
 
     /// <summary>
@@ -119,19 +103,47 @@ public sealed class EmberLlmClient : IDisposable
     public IAsyncEnumerable<string> StreamAsync(string prompt, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-        return StreamAsync(new ChatRequest { Messages = [new(ChatRole.User, prompt)] }, cancellationToken);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var body = ChatOptionsMapper.ToRequestBody([new(ChatRole.User, prompt)], options: null, stream: true);
+        return StreamTextCoreAsync(body, requestedModel: null, cancellationToken);
     }
 
     /// <summary>
-    /// Sends a chat request and streams the reply text as it is generated.
+    /// Sends a chat request and returns the full response, including token usage and finish reason.
     /// </summary>
-    /// <param name="request">The request. Must contain at least one message.</param>
-    /// <param name="cancellationToken">Cancels the request, including mid-stream.</param>
-    /// <returns>The reply text, one fragment (usually one token) at a time. Reasoning from thinking models is not included.</returns>
-    public IAsyncEnumerable<string> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    /// <param name="messages">The conversation so far. Only text content is supported.</param>
+    /// <param name="options">
+    /// Request options. Every OpenAI-compatible option is sent; anything EmberLlm can't honor (such as
+    /// tools, before v0.2) throws <see cref="NotSupportedException"/> before any request is made.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The server's response.</returns>
+    /// <exception cref="NotSupportedException">An option or message content can't be sent by EmberLlm.</exception>
+    /// <exception cref="EmberLlmHttpException">The server returned a non-success status code.</exception>
+    /// <exception cref="EmberLlmConnectionException">The server could not be reached.</exception>
+    /// <exception cref="EmberLlmTimeoutException">The request exceeded <see cref="EmberLlmOptions.RequestTimeout"/>.</exception>
+    /// <exception cref="NoModelAvailableException">No model was specified and the server lists none.</exception>
+    public async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
-        ValidateChatRequest(request);
-        return StreamTextCoreAsync(request, cancellationToken);
+        ArgumentNullException.ThrowIfNull(messages);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // Build (and so validate) the body before anything is sent, including the model lookup
+        var body = ChatOptionsMapper.ToRequestBody(messages, options, stream: false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var model = await ResolveModelAsync(options?.ModelId, cancellationToken).ConfigureAwait(false);
+        using var httpRequest = CreateChatRequestMessage(body, model);
+
+        var wire = await SendAsync(httpRequest, WireJsonContext.Default.WireChatResponse, cancellationToken).ConfigureAwait(false);
+        var response = ChatMapper.ToChatResponse(wire);
+        if (_strictModelMatching)
+        {
+            EnsureModelMatches(model, response.ModelId, httpRequest);
+        }
+
+        return response;
     }
 
     /// <summary>
@@ -139,18 +151,47 @@ public sealed class EmberLlmClient : IDisposable
     /// reason, and token usage in the final update. Use Microsoft.Extensions.AI's
     /// <c>ToChatResponse()</c> to combine the updates into a single <see cref="ChatResponse"/>.
     /// </summary>
-    /// <param name="request">The request. Must contain at least one message.</param>
+    /// <param name="messages">The conversation so far. Only text content is supported.</param>
+    /// <param name="options">Request options; see <see cref="GetResponseAsync"/>.</param>
     /// <param name="cancellationToken">Cancels the request, including mid-stream.</param>
     /// <returns>One update per chunk the server sends.</returns>
+    /// <exception cref="NotSupportedException">An option or message content can't be sent by EmberLlm.</exception>
     /// <exception cref="EmberLlmHttpException">The server returned a non-success status code.</exception>
     /// <exception cref="EmberLlmConnectionException">The server could not be reached, or the connection dropped mid-stream.</exception>
     /// <exception cref="EmberLlmTimeoutException">The stream exceeded <see cref="EmberLlmOptions.RequestTimeout"/>.</exception>
     /// <exception cref="EmberLlmException">The server reported an error mid-stream or sent an invalid chunk.</exception>
-    public IAsyncEnumerable<ChatResponseUpdate> StreamUpdatesAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         // Validation runs here, not in the iterator, so bad arguments throw at the call site
-        ValidateChatRequest(request);
-        return StreamUpdatesCoreAsync(request, cancellationToken);
+        ArgumentNullException.ThrowIfNull(messages);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var body = ChatOptionsMapper.ToRequestBody(messages, options, stream: true);
+        return StreamUpdatesCoreAsync(body, options?.ModelId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns <see cref="ChatClientMetadata"/> (provider "EmberLlm", the server's API URL and the default
+    /// model) when asked for it, or this client when asked for a type it implements; otherwise <see langword="null"/>.
+    /// </summary>
+    /// <param name="serviceType">The type of service requested.</param>
+    /// <param name="serviceKey">An optional key; EmberLlm registers no keyed services, so any key returns <see langword="null"/>.</param>
+    /// <returns>The service, or <see langword="null"/>.</returns>
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+
+        if (serviceKey is not null)
+        {
+            return null;
+        }
+
+        if (serviceType == typeof(ChatClientMetadata))
+        {
+            return _metadata;
+        }
+
+        return serviceType.IsInstanceOfType(this) ? this : null;
     }
 
     /// <summary>
@@ -205,7 +246,7 @@ public sealed class EmberLlmClient : IDisposable
 
             _firstListedModel = models.Data?.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.Id))?.Id
                 ?? throw new NoModelAvailableException(
-                    $"No model was specified and the server at {_modelsUri} lists no models. Set ChatRequest.Model or EmberLlmOptions.DefaultModel, or load a model on the server.");
+                    $"No model was specified and the server at {_modelsUri} lists no models. Set ChatOptions.ModelId or EmberLlmOptions.DefaultModel, or load a model on the server.");
 
             return _firstListedModel;
         }
@@ -215,9 +256,9 @@ public sealed class EmberLlmClient : IDisposable
         }
     }
 
-    private async IAsyncEnumerable<string> StreamTextCoreAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    private async IAsyncEnumerable<string> StreamTextCoreAsync(JsonObject body, string? requestedModel, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        await foreach (var update in StreamUpdatesCoreAsync(request, cancellationToken).ConfigureAwait(false))
+        await foreach (var update in StreamUpdatesCoreAsync(body, requestedModel, cancellationToken).ConfigureAwait(false))
         {
             if (update.Text is { Length: > 0 } text)
             {
@@ -226,12 +267,12 @@ public sealed class EmberLlmClient : IDisposable
         }
     }
 
-    private async IAsyncEnumerable<ChatResponseUpdate> StreamUpdatesCoreAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    private async IAsyncEnumerable<ChatResponseUpdate> StreamUpdatesCoreAsync(JsonObject body, string? requestedModel, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var model = await ResolveModelAsync(request.Model, cancellationToken).ConfigureAwait(false);
-        using var httpRequest = CreateChatRequestMessage(request, model, stream: true);
+        var model = await ResolveModelAsync(requestedModel, cancellationToken).ConfigureAwait(false);
+        using var httpRequest = CreateChatRequestMessage(body, model);
 
         // RequestTimeout bounds the whole stream, not just the wait for the first byte
         using var timeoutSource = CreateTimeoutSource(cancellationToken);
@@ -242,6 +283,7 @@ public sealed class EmberLlmClient : IDisposable
         var events = SseReader.ReadEventsAsync(stream, timeoutSource.Token).GetAsyncEnumerator(timeoutSource.Token);
         await using var eventsScope = events.ConfigureAwait(false);
 
+        var modelChecked = false;
         while (true)
         {
             // C# can't yield inside a try with a catch, so each read is wrapped on its own
@@ -250,7 +292,7 @@ public sealed class EmberLlmClient : IDisposable
             {
                 if (!await events.MoveNextAsync().ConfigureAwait(false))
                 {
-                    yield break;
+                    break;
                 }
 
                 sse = events.Current;
@@ -268,7 +310,43 @@ public sealed class EmberLlmClient : IDisposable
                 (update.AdditionalProperties ??= [])["sse.event"] = eventType;
             }
 
+            // Strict mode checks the first chunk that reports a model, before anything is handed to the caller
+            if (_strictModelMatching && !modelChecked && update.ModelId is not null)
+            {
+                EnsureModelMatches(model, update.ModelId, httpRequest);
+                modelChecked = true;
+            }
+
             yield return update;
+        }
+
+        // In strict mode a stream that never said which model answered can't be verified, so it fails
+        // rather than passing silently
+        if (_strictModelMatching && !modelChecked)
+        {
+            EnsureModelMatches(model, reportedModel: null, httpRequest);
+        }
+    }
+
+    /// <summary>
+    /// Strict mode: throws <see cref="ModelMismatchException"/> unless the reply reported the requested model.
+    /// </summary>
+    private static void EnsureModelMatches(string requestedModel, string? reportedModel, HttpRequestMessage request)
+    {
+        if (reportedModel is null)
+        {
+            throw new ModelMismatchException(
+                $"{request.Method} {request.RequestUri} did not report which model answered, so StrictModelMatching can't confirm it was \"{requestedModel}\".",
+                requestedModel,
+                reportedModel);
+        }
+
+        if (!string.Equals(requestedModel, reportedModel, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ModelMismatchException(
+                $"Requested model \"{requestedModel}\" but {request.RequestUri} answered with \"{reportedModel}\". Some servers substitute the loaded model for an unknown one.",
+                requestedModel,
+                reportedModel);
         }
     }
 
@@ -401,22 +479,18 @@ public sealed class EmberLlmClient : IDisposable
         return source;
     }
 
-    private void ValidateChatRequest(ChatRequest request)
+    private HttpRequestMessage CreateChatRequestMessage(JsonObject body, string model)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (request.Messages is null || request.Messages.Count == 0)
+        // Copied rather than modified, because a streaming enumerable can be enumerated more than once
+        var payload = new JsonObject { ["model"] = model };
+        foreach (var (key, value) in body)
         {
-            throw new ArgumentException("A chat request needs at least one message.", nameof(request));
+            payload[key] = value?.DeepClone();
         }
-    }
 
-    private HttpRequestMessage CreateChatRequestMessage(ChatRequest request, string model, bool stream)
-    {
-        var body = JsonSerializer.Serialize(ChatMapper.ToWire(request, model, stream), WireJsonContext.Default.WireChatRequest);
         return new HttpRequestMessage(HttpMethod.Post, _chatCompletionsUri)
         {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json"),
         };
     }
 

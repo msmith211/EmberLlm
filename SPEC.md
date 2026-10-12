@@ -1,6 +1,6 @@
 # EmberLlm .NET Client: Project Spec
 
-Oct 8, 2026 · @Michael Smith (revised Oct 9, 2026)
+Oct 8, 2026 · @Michael Smith (revised Oct 12, 2026)
 
 ## Overview
 
@@ -8,7 +8,7 @@ EmberLlm is an open-source .NET library (NuGet package) that makes local LLM ser
 
 The official OpenAI SDK and Microsoft.Extensions.AI handle generic chat well, and OllamaSharp covers one backend. None of them focus on what is specific to local inference: finding running servers, managing which model is loaded, and getting reliable structured output from smaller models. That gap is this library's reason to exist.
 
-The library complements existing tools rather than replacing them. It implements `IChatClient` and reuses Microsoft.Extensions.AI's message and response types, so it drops into that ecosystem without conversion code.
+The library complements existing tools rather than replacing them. `EmberLlmClient` is itself a Microsoft.Extensions.AI `IChatClient` and uses that package's types throughout, so it drops into that ecosystem without adapters or conversion code.
 
 Name: EmberLlm (package ID, root namespace and repo). Chosen in milestone 1 after confirming it was free on NuGet and GitHub.
 
@@ -16,15 +16,15 @@ Name: EmberLlm (package ID, root namespace and repo). Chosen in milestone 1 afte
 
 v0.1 ships five capabilities and nothing else. Keep it small enough to publish in a few weekends.
 
-1. **Chat completion** against any OpenAI-compatible `/v1/chat/completions` endpoint: full-response, simple text streaming via `IAsyncEnumerable<string>`, and rich streaming via `IAsyncEnumerable<ChatResponseUpdate>` that carries usage and finish reason.
+1. **Chat completion** against any OpenAI-compatible `/v1/chat/completions` endpoint, through `IChatClient`'s `GetResponseAsync` and `GetStreamingResponseAsync` (rich updates with usage and finish reason), plus the simple `CompleteAsync(string)` and `StreamAsync(string)`.
 2. **Model listing** through `/v1/models`, returning typed model info.
 3. **Server discovery** that probes common local ports and identifies which backend is running.
-4. **Typed structured output** via `GetAsync<T>()`: generate a JSON schema from a C# type, request it from the server, clean and parse the response, and retry with the error on failure.
-5. **`IChatClient` adapter** so the client works anywhere Microsoft.Extensions.AI is used.
+4. **Typed structured output** via `GetAsync<T>()`: generate a JSON schema from a C# type, request it from the server, clean and parse the response, and retry with the error on failure. The final scope depends on the comparison spike (milestone 5b).
+5. **Microsoft.Extensions.AI integration:** `EmberLlmClient` implements `IChatClient`, so it works anywhere Microsoft.Extensions.AI is used, including its middleware.
 
 ### Non-goals for v0.1
 
-- Tool/function calling (planned for v0.2)
+- Tool/function calling (planned for v0.2). Until then, a request that sets `ChatOptions.Tools` or `ToolMode` throws `NotSupportedException`
 - Loading or unloading models through backend-native APIs (v0.2)
 - Embeddings, images, audio
 - Running models in-process (no llama.cpp bindings; this library only talks to servers)
@@ -60,11 +60,11 @@ EmberLlm/
 │   └── EmberLlm/
 │       ├── EmberLlmClient.cs        # main entry point
 │       ├── EmberLlmOptions.cs
-│       ├── Chat/                    # request model, streaming (SSE parser)
+│       ├── Chat/                    # wire types, ChatOptions mapping, SSE reader
 │       ├── Models/                  # /v1/models types
 │       ├── Discovery/               # port probing, backend fingerprinting
 │       ├── Structured/              # schema generation, output cleanup, parsing, retry loop
-│       ├── Extensions/              # IChatClient adapter, DI registration
+│       ├── Extensions/              # DI registration
 │       └── Backends/                # per-backend quirks and capabilities (LM Studio, Ollama, llama.cpp, vLLM)
 ├── tests/
 │   ├── EmberLlm.Tests/              # unit tests, fake HTTP handler
@@ -72,6 +72,7 @@ EmberLlm/
 │   └── fixtures/<backend>/          # recorded responses
 ├── samples/
 │   └── QuickStart/                  # console app from the README
+├── spikes/                          # throwaway experiments (milestone 5b), not part of the solution or CI
 ├── .github/workflows/ci.yml
 ├── ROADMAP.md
 ├── README.md
@@ -83,18 +84,52 @@ EmberLlm/
 
 ## Type naming
 
-Reuse Microsoft.Extensions.AI types instead of defining parallel ones. The library already depends on that package, and same-named types (`ChatMessage`, `ChatRole`, `ChatResponse`) would cause ambiguous-reference errors for anyone importing both namespaces.
+Reuse Microsoft.Extensions.AI types wherever the concept already exists ([0001](docs/decisions/0001-reuse-microsoft-extensions-ai-types.md), [0005](docs/decisions/0005-emberllmclient-implements-ichatclient.md)). EmberLlm defines its own types only for concepts that package doesn't have.
 
 | Concept | Type |
 | --- | --- |
 | Message, role | `Microsoft.Extensions.AI.ChatMessage`, `ChatRole` |
+| Request options (model, temperature, ...) | `Microsoft.Extensions.AI.ChatOptions` |
 | Full response (text, usage, finish reason) | `Microsoft.Extensions.AI.ChatResponse`, `UsageDetails` |
 | Streaming update | `Microsoft.Extensions.AI.ChatResponseUpdate` |
-| Request with local-specific options | `EmberLlm.ChatRequest` (own type, no clash) |
+| Client metadata | `Microsoft.Extensions.AI.ChatClientMetadata`, returned by `GetService` |
 | Model info | `EmberLlm.ModelInfo` |
 | Discovery result | `EmberLlm.DiscoveredServer`, `BackendType` |
 
 Backend-specific extras (for example llama.cpp `timings`) go into `AdditionalProperties` on the response or update rather than new types.
+
+## Design rules
+
+These two rules apply to every feature. Code that breaks one is a bug, fixed without reopening the decision.
+
+### Never fail silently
+
+1. **Requests:** every value a caller sets that a server could act on is either sent, or rejected with an exception before that request goes out.
+2. **Responses:** every field in a server's JSON response is either mapped to a typed property or kept in `AdditionalProperties`. If EmberLlm can't represent a response faithfully (for example, several choices), it throws.
+3. **Exceptions are listed explicitly** in code, tests and docs. Currently: message metadata (`MessageId`, `CreatedAt`, `RawRepresentation`), reasoning from earlier turns (servers expect it not to be replayed), and the SSE `id:` and `retry:` fields (reconnection hints; EmberLlm doesn't reconnect). Anything not listed falls under 1 or 2.
+4. **Guard tests** classify every settable property of the Microsoft.Extensions.AI types EmberLlm sends (`ChatMessage`, `ChatOptions`). A new property added by a package upgrade fails the build until it is handled.
+
+### Support everything OpenAI-compatible
+
+Every `ChatOptions` setting with an OpenAI-compatible equivalent is mapped:
+
+| `ChatOptions` | Sent as |
+| --- | --- |
+| `ModelId` | `model` (see model selection) |
+| `Temperature` | `temperature` |
+| `MaxOutputTokens` | `max_tokens` |
+| `TopP` | `top_p` |
+| `StopSequences` | `stop` |
+| `Seed` | `seed` |
+| `FrequencyPenalty` | `frequency_penalty` |
+| `PresencePenalty` | `presence_penalty` |
+| `Instructions` | A system message added before the conversation (chat completions has no `instructions` field) |
+| `TopK` | `top_k` ([0007](docs/decisions/0007-map-topk-reasoning-and-response-format.md)) |
+| `Reasoning.Effort` | `reasoning_effort`: `none`, `low`, `medium`, `high`; `ExtraHigh` throws (0007) |
+| `ResponseFormat` | `response_format`: `text`, `json_object`, or `json_schema` (0007) |
+| `AdditionalProperties` | Passed through as extra top-level request fields. A key EmberLlm already sets for the request throws `ArgumentException`. |
+
+Anything else throws `NotSupportedException`, with a message naming the option and whether support is planned: `Tools`, `ToolMode` (required modes) and `AllowMultipleToolCalls` (v0.2), `ConversationId`, `AllowBackgroundResponses`, `ContinuationToken`, `RawRepresentationFactory` and `Reasoning.Output`. Settings that ask for nothing EmberLlm can't do are accepted: an empty tool list, tool mode `Auto` or `None`, and `false` for the boolean switches.
 
 ## Public API sketch
 
@@ -121,26 +156,22 @@ string answer = await llm.CompleteAsync("Explain Span<T> in two sentences");
 await foreach (string token in llm.StreamAsync("Write a haiku about garbage collection"))
     Console.Write(token);
 
-// Rich streaming (usage, finish reason, timing data for benchmarks)
-await foreach (ChatResponseUpdate update in llm.StreamUpdatesAsync(new ChatRequest { /* ... */ }))
-    Console.Write(update.Text);
-
-// Multi-turn with options
-ChatResponse reply = await llm.ChatAsync(new ChatRequest
-{
-    Model = "qwen3-14b",
-    Messages = [new(ChatRole.System, "You are terse."), new(ChatRole.User, "Hi")],
-    Temperature = 0.2f,
-    MaxTokens = 256
-});
+// Multi-turn with options (IChatClient)
+ChatResponse reply = await llm.GetResponseAsync(
+    [new(ChatRole.System, "You are terse."), new(ChatRole.User, "Hi")],
+    new ChatOptions { ModelId = "qwen3-14b", Temperature = 0.2f, MaxOutputTokens = 256 });
 Console.WriteLine($"{reply.Text} ({reply.Usage?.OutputTokenCount} tokens)");
+
+// Rich streaming (usage, finish reason, timing data for benchmarks)
+await foreach (ChatResponseUpdate update in llm.GetStreamingResponseAsync(messages, options))
+    Console.Write(update.Text);
 
 // Typed structured output
 public record CodeReview(string Summary, string[] Issues, int Severity);
 CodeReview review = await llm.GetAsync<CodeReview>("Review this method: ...");
 
-// Microsoft.Extensions.AI interop
-IChatClient chat = llm.AsChatClient();
+// Microsoft.Extensions.AI interop: the client already is an IChatClient
+IChatClient chat = llm;
 
 // DI
 services.AddEmberLlm(o => o.BaseUrl = "http://localhost:1234");
@@ -148,16 +179,18 @@ services.AddEmberLlm(o => o.BaseUrl = "http://localhost:1234");
 
 Constructors: `EmberLlmClient(string baseUrl)`, `EmberLlmClient(EmberLlmOptions options)`, `EmberLlmClient(DiscoveredServer server)`, and `EmberLlmClient(HttpClient httpClient, EmberLlmOptions options)`. The options-only overload lets callers set `DefaultModel` or `RequestTimeout` without supplying an `HttpClient`.
 
-Exceptions (see `docs/decisions/0003-exception-model.md`): all derive from `EmberLlmException`. `EmberLlmHttpException` (non-success status, with `StatusCode`, `ServerMessage`, `ResponseBody`), `EmberLlmConnectionException` (server unreachable), `EmberLlmTimeoutException`, `NoModelAvailableException`, and `StructuredOutputException` (milestone 6). Caller cancellation throws `OperationCanceledException` with the caller's token. `EmberLlmDiscovery.FindAsync` has an overload that accepts an `HttpClient`.
+Exceptions (see `docs/decisions/0003-exception-model.md`): all derive from `EmberLlmException`. `EmberLlmHttpException` (non-success status, with `StatusCode`, `ServerMessage`, `ResponseBody`), `EmberLlmConnectionException` (server unreachable), `EmberLlmTimeoutException`, `NoModelAvailableException`, `ModelMismatchException` (only with `EmberLlmOptions.StrictModelMatching`, see [0008](docs/decisions/0008-model-substitution-and-strict-matching.md)), and `StructuredOutputException` (milestone 6). Caller cancellation throws `OperationCanceledException` with the caller's token. Options, message content or message fields that EmberLlm can't send throw the standard `NotSupportedException` or `ArgumentException` before any chat request goes out (see Design rules). `EmberLlmDiscovery.FindAsync` has an overload that accepts an `HttpClient`.
 
 ### Model selection
 
 When a call does not name a model, resolve it in this order:
 
-1. `ChatRequest.Model`, if set
+1. `ChatOptions.ModelId`, if set
 2. `EmberLlmOptions.DefaultModel`, if set
 3. The first model returned by `/v1/models`, fetched once and cached for the lifetime of the client
 4. Otherwise throw `NoModelAvailableException`
+
+The reply's `ModelId` shows which model actually answered. Some servers substitute the loaded model for an unknown one; with `StrictModelMatching` on, a mismatch throws `ModelMismatchException` ([0008](docs/decisions/0008-model-substitution-and-strict-matching.md)).
 
 Document in the README that on Ollama, `/v1/models` lists every installed model, not just loaded ones, so option 3 may trigger a model load. Ollama users should set `DefaultModel`.
 
@@ -199,6 +232,7 @@ Discovery rules:
 Unit tests run everywhere with no server; integration tests are opt-in and run against a real local backend.
 
 - **Unit tests (xUnit v3):** a fake `HttpMessageHandler` replays recorded responses. Cover request shaping, SSE stream parsing (including split chunks, `[DONE]`, and keep-alive comments), error mapping, timeouts vs cancellation, model selection, output cleanup (think blocks, code fences), and the structured-output retry loop.
+- **Design-rule tests:** every mapped option and message field, every rejection, pass-through of `AdditionalProperties`, preservation of unmodeled response fields, and the guard tests for `ChatMessage` and `ChatOptions`.
 - **Recorded fixtures:** capture real responses from each backend once and store them under `tests/fixtures/<backend>/`, where `<backend>` is `lmstudio`, `ollama`, `llamacpp`, `vllm` or `generic`. Backend quirks get tested from these.
 - **Integration tests:** skipped via `Assert.Skip` unless `EMBERLLM_TEST_URL` is set. Use the smallest model available so they run fast.
 - **CI:** GitHub Actions builds and runs unit tests on Linux and Windows on every push and PR. Integration tests stay local.
@@ -220,26 +254,28 @@ Unit tests run everywhere with no server; integration tests are opt-in and run a
 - One branch per milestone (`milestone/2-chat`, etc.), merged into `main` through a reviewed pull request.
 - Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `chore:`), small and focused.
 
-**Decision notes:** record each significant design choice in `docs/decisions/NNNN-title.md` (short format: context, decision, alternatives considered, consequences). Write one whenever a choice would prompt "why did you do it this way?" in a code review. Starting set:
+**Decision notes:** record each significant design choice in `docs/decisions/NNNN-title.md` (short format: context, decision, alternatives considered, consequences). Write one whenever a choice would prompt "why did you do it this way?" in a code review. Fixes that only bring code in line with an existing rule get a short fix note instead. The index is [docs/decisions/README.md](docs/decisions/README.md). Still to write, in the milestones that make them:
 
-- Reusing Microsoft.Extensions.AI types instead of defining our own
-- Strict deserialization instead of JSON Schema validation for structured output
-- Requiring a valid `/v1/models` response before reporting a discovered server
-- Model selection order
+- Strict deserialization instead of JSON Schema validation for structured output (milestone 6)
+- Requiring a valid `/v1/models` response before reporting a discovered server (milestone 5)
 
 **Repo hygiene:** `CHANGELOG.md` (Keep a Changelog format), `ROADMAP.md`, `CONTRIBUTING.md`, one bug-report issue template, MIT `LICENSE`, `.editorconfig`, `.gitattributes`. Nothing heavier; governance documents look odd on a one-person project.
 
 ## Build order
 
-Build in this order, one milestone per session or PR. Each milestone ends with passing tests and a commit.
+Build in this order, one milestone per session or PR. Each milestone ends with passing tests and a commit. Milestones 1–3 are done; their descriptions record what was originally planned, and 3b reworks part of them.
 
-1. **Scaffold.** Solution, projects, CI workflow (with coverage reporting), `.editorconfig`, `LICENSE`, stub README with badge placeholders, empty `ROADMAP.md` and `CHANGELOG.md`, `CONTRIBUTING.md`, bug-report issue template, `docs/decisions/` with the first decision note, and choose a final package name. Done when `dotnet build` and `dotnet test` pass in CI.
-2. **Chat (non-streaming).** `EmberLlmClient`, options, `ChatRequest`, `CompleteAsync` and `ChatAsync` returning `ChatResponse` with usage, model selection, timeout handling, typed exceptions for HTTP and server errors. Done when unit tests cover success, 4xx, 5xx, timeouts, caller cancellation, and each model-selection branch.
-3. **Streaming.** SSE parser, `StreamAsync` (overloads for a prompt string and a `ChatRequest`) and `StreamUpdatesAsync`; request `stream_options.include_usage` so the final update carries usage. Verify each backend accepts `stream_options` when recording fixtures. Done when fixture tests cover split chunks, `[DONE]`, keep-alive comments, usage in the final update, and cancellation mid-stream.
+1. **Scaffold.** *(Done.)* Solution, projects, CI workflow (with coverage reporting), `.editorconfig`, `LICENSE`, stub README with badge placeholders, empty `ROADMAP.md` and `CHANGELOG.md`, `CONTRIBUTING.md`, bug-report issue template, `docs/decisions/` with the first decision note, and choose a final package name. Done when `dotnet build` and `dotnet test` pass in CI.
+2. **Chat (non-streaming).** *(Done.)* `EmberLlmClient`, options, `ChatRequest`, `CompleteAsync` and `ChatAsync` returning `ChatResponse` with usage, model selection, timeout handling, typed exceptions for HTTP and server errors. Done when unit tests cover success, 4xx, 5xx, timeouts, caller cancellation, and each model-selection branch.
+3. **Streaming.** *(Done.)* SSE parser, `StreamAsync` (overloads for a prompt string and a `ChatRequest`) and `StreamUpdatesAsync`; request `stream_options.include_usage` so the final update carries usage. Verify each backend accepts `stream_options` when recording fixtures. Done when fixture tests cover split chunks, `[DONE]`, keep-alive comments, usage in the final update, and cancellation mid-stream.
+
+   **3b. IChatClient.** Make `EmberLlmClient` implement `IChatClient` ([0005](docs/decisions/0005-emberllmclient-implements-ichatclient.md)): `GetResponseAsync` and `GetStreamingResponseAsync` replace `ChatAsync` and `StreamUpdatesAsync`; remove `ChatRequest` and the `StreamAsync(ChatRequest)` overload; map `ChatOptions` per Design rules; implement `GetService` returning `ChatClientMetadata`. Also: update the `NoModelAvailableException` message to name `ChatOptions.ModelId`, add a test proving concurrent first calls make only one `/v1/models` request, and delete the leftover `AssemblyTests`. Done when every existing behavior test passes against the new methods, each mapped option and each rejection has a test, `AdditionalProperties` pass through, and the `ChatOptions` guard test passes.
 4. **Models.** `ListModelsAsync` with typed `ModelInfo`. Done when fixtures from at least LM Studio and Ollama parse.
 5. **Discovery.** Parallel probing and fingerprinting per the table above. Done when fixture-based unit tests identify each backend, reject a non-LLM server on port 8000/8080, and return empty when nothing answers. Verifying against a running LM Studio is a manual check, not a CI test.
+
+   **5b. Comparison spike.** A time-boxed experiment, not library code: compare EmberLlm with the obvious alternative, the official OpenAI SDK plus Microsoft's adapter pointed at a local server, using LM Studio and a small thinking model. Check at least: whether reasoning content survives, whether a model name is required, what errors look like when the server is down or the model is missing, and how Microsoft.Extensions.AI's own `GetResponseAsync<T>` copes with small-model output (code fences, `<think>` blocks, missing fields, retries). Throwaway code lives in `spikes/`; findings go in `docs/spikes/`. Done when the findings are written up, milestone 6's scope is confirmed or narrowed, and the README's "why this exists" section is revised so every claim is backed by the findings.
 6. **Structured output.** Schema generation, `response_format` vs prompt fallback, output cleanup, strict deserialization, retry loop. Done when tests prove a malformed first response triggers exactly one corrective retry, a `<think>`-prefixed or fenced response parses on the first attempt, and exhausting retries throws with all attempt errors.
-7. **Interop and DI.** `AsChatClient()` and `AddEmberLlm()`. Done when the sample app runs through `IChatClient`.
+7. **Dependency injection.** `AddEmberLlm()`, registering `EmberLlmClient` and `IChatClient` through `IHttpClientFactory`. (`AsChatClient()` is no longer needed; see 3b.) Done when the sample app resolves `IChatClient` from DI and chats through it.
 8. **Release prep.** README meeting every requirement in Documentation and repo standards (quick start, GIF, live badges, status note, decision-note links), samples, package metadata (description, tags, icon, repository URL), SourceLink, `CHANGELOG.md` entry for 0.1.0, decision notes complete, a tagged release workflow that publishes to NuGet and creates a GitHub release from the changelog. **Requires Michael:** create the NuGet API key or configure trusted publishing and add it to the GitHub repo secrets; record the GIF. Done when `v0.1.0` installs from NuGet and the GitHub release page is up.
 
 ## Phase 2: benchmark CLI
@@ -252,4 +288,4 @@ llmbench run --models qwen3-14b,llama-3.1-8b --ctx 4k,16k,32k --concurrency 1,4
 
 Planned measurements: time to first token, prompt processing tokens/sec, generation tokens/sec, peak VRAM and power draw (polled from nvidia-smi), speed versus context length, and throughput under parallel requests. Output is a terminal table, a JSON results file, and a Markdown snippet with hardware info for sharing.
 
-v0.1 must already expose what these measurements need, so Phase 2 does not force a breaking change: `StreamUpdatesAsync` for time to first token, usage on `ChatResponse` and the final streaming update, and backend timing data (where the server reports it) in `AdditionalProperties`.
+v0.1 must already expose what these measurements need, so Phase 2 does not force a breaking change: `GetStreamingResponseAsync` for time to first token, usage on `ChatResponse` and the final streaming update, and backend timing data (where the server reports it) in `AdditionalProperties`.
