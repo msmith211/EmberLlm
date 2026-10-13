@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!NOTE]
-> **Status: pre-release.** v0.1 is in development and not yet on NuGet. Chat, streaming and model listing work today, with unit tests in CI and integration tests against a real LM Studio server. Server discovery, typed structured output and dependency injection are still being built (see [Coming next](#coming-next)). The API may change before 1.0.
+> **Status: pre-release.** v0.1 is in development and not yet on NuGet. Chat, streaming, model listing and server discovery work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output and dependency injection are still being built (see [Coming next](#coming-next)). The API may change before 1.0.
 
 <!-- TODO (milestone 8): terminal GIF of discovery + streaming goes here. -->
 
@@ -29,12 +29,13 @@ If you run models on your own hardware, you can already call them from .NET: the
 Already in place:
 
 - **Reasoning stays separate.** Thinking models' reasoning arrives as `TextReasoningContent`, not mixed into the answer text.
+- **Finds running servers.** Discovery probes the default ports of LM Studio, Ollama, llama.cpp and vLLM, confirms each server and identifies which backend it is.
 - **No model name required.** If you don't name one, EmberLlm uses your configured default, then the first model the server lists.
 - **Clear errors for local setups.** "Server not running", "server returned an error" (with the server's own message) and "request timed out" are separate exception types.
 - **Timeouts suited to slow hardware.** The default request timeout is 10 minutes, and it is kept distinct from your own cancellation.
 - **Never fails silently.** Every option you set is either sent or rejected before the request goes out, and every response field is either mapped or kept in `AdditionalProperties`. See [SPEC.md, Design rules](SPEC.md#design-rules).
 
-Planned for v0.1: finding running servers automatically, and getting typed objects back from small models that wrap JSON in code fences or `<think>` blocks. A comparison with the OpenAI SDK plus Microsoft's adapter is scheduled before that work, and this section will be updated with its findings.
+Planned for v0.1: getting typed objects back from small models that wrap JSON in code fences or `<think>` blocks. A comparison with the OpenAI SDK plus Microsoft's adapter is scheduled before that work, and this section will be updated with its findings.
 
 EmberLlm complements those libraries rather than replacing them. `EmberLlmClient` *is* an `IChatClient` and uses Microsoft.Extensions.AI's message types, so it drops into that ecosystem without conversion code.
 
@@ -69,7 +70,25 @@ await foreach (string token in llm.StreamAsync("Write a haiku about garbage coll
 ```
 
 > [!TIP]
-> Prefer `127.0.0.1` over `localhost`, especially on Windows. .NET tries IPv6 (`::1`) first, and many local servers, LM Studio included, listen only on IPv4, so the first request to `localhost` waits about 2 seconds for the refused IPv6 attempt before falling back.
+> `localhost` works too: EmberLlm connects to IPv4 and IPv6 at the same time. If you pass in your own `HttpClient`, prefer `127.0.0.1`: by default .NET tries IPv6 (`::1`) first, and many local servers, LM Studio included, listen only on IPv4, so on Windows the first request waits about 2 seconds ([decision 0010](docs/decisions/0010-parallel-connect-for-owned-http-clients.md)).
+
+### Find a running server
+
+```csharp
+using EmberLlm;
+
+DiscoveryResult servers = await EmberLlmDiscovery.FindAsync();
+foreach (DiscoveredServer server in servers)
+    Console.WriteLine(server); // LmStudio at http://127.0.0.1:1234/ (2 models)
+
+if (servers.Count > 0)
+{
+    using var llm = new EmberLlmClient(servers[0]);
+    Console.WriteLine(await llm.CompleteAsync("Say hello."));
+}
+```
+
+Add endpoints such as another machine on your network through `DiscoveryOptions.Endpoints`. Servers that answer but aren't usable are listed in `servers.Skipped` with the reason.
 
 ### Use it as an `IChatClient`
 
@@ -123,6 +142,7 @@ catch (EmberLlmHttpException ex)
 | Unsupported options | Options EmberLlm can't honor, such as tools (planned for v0.2), throw `NotSupportedException` before any request is made. |
 | Model selection | `ChatOptions.ModelId`, then `EmberLlmOptions.DefaultModel`, then the server's first listed model ([decision 0002](docs/decisions/0002-model-selection-order.md)). |
 | Model listing | `ListModelsAsync()` returns a `ModelList` of `ModelInfo` (id, owner, creation time, plus server-specific fields). |
+| Discovery | `EmberLlmDiscovery.FindAsync()` probes default ports (and any endpoints you add) in parallel, confirms each server with `/v1/models`, identifies the backend from response content, and reports unusable endpoints in `Skipped` ([decision 0009](docs/decisions/0009-discovery-design.md)). |
 | Errors | `EmberLlmHttpException` (status code and the server's message), `EmberLlmConnectionException`, `EmberLlmTimeoutException`, `NoModelAvailableException` and `ModelMismatchException`, all deriving from `EmberLlmException` ([decision 0003](docs/decisions/0003-exception-model.md)). |
 | Strict model matching | Opt-in `EmberLlmOptions.StrictModelMatching` throws when a server answers with a different model than requested ([decision 0008](docs/decisions/0008-model-substitution-and-strict-matching.md)). |
 | Interop | `GetService` returns `ChatClientMetadata`, so Microsoft.Extensions.AI middleware and libraries built on `IChatClient` work unchanged. |
@@ -135,7 +155,6 @@ These are **not available yet**. Names may change before they ship.
 
 | Feature | Planned API | Milestone |
 | --- | --- | --- |
-| Server discovery | `EmberLlmDiscovery.FindAsync()` probes common local ports and identifies the backend | 5 (in progress) |
 | Typed structured output | `GetAsync<T>()` cleans small-model output, deserializes into your type, and retries on failure | 6 |
 | Dependency injection | `services.AddEmberLlm(...)` registers `EmberLlmClient` and `IChatClient` | 7 |
 | NuGet package | `dotnet add package EmberLlm` | 8 (v0.1.0 release) |
@@ -153,6 +172,8 @@ EmberLlm talks to any server with an OpenAI-compatible `/v1/chat/completions` en
 | llama.cpp server | `http://127.0.0.1:8080` | Not yet | |
 | vLLM | `http://127.0.0.1:8000` | Not yet | |
 | Other OpenAI-compatible servers | (your server's URL) | Not yet | |
+
+Discovery identifies LM Studio from responses recorded from a real server. Its identification of Ollama, llama.cpp and vLLM follows their documentation and hasn't been checked against real servers yet.
 
 Bug reports and recorded responses from untested backends are especially welcome; see [CONTRIBUTING.md](CONTRIBUTING.md#recorded-fixtures).
 
