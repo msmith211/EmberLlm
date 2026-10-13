@@ -1,6 +1,6 @@
 # 0009. Discovery: confirm with /v1/models, identify by content, report what was skipped
 
-- Status: Proposed. The `/v1/models` requirement was already agreed in SPEC.md; the rest is new.
+- Status: Accepted (Michael, 2026-10-13)
 - Date: 2026-10-12
 
 ## Context
@@ -39,4 +39,4 @@ The spec also says discovery never throws, which on its own would mean problems 
 
 - Discovery takes about twice `ProbeTimeout` (~0.5–1 s with defaults): one round for `/v1/models`, one for the fingerprints.
 - Only the LM Studio fingerprint is verified against a real server. The Ollama, llama.cpp and vLLM fingerprints follow their documentation and are tested against hand-written responses until real recordings exist.
-- `new EmberLlmClient("http://localhost:1234")` pays the same ~2 s on its first request on Windows. The README recommends `127.0.0.1`; whether the client should also work around it is a separate question, outside this decision.
+- `new EmberLlmClient("http://localhost:1234")` pays the same ~2 s on its first request on Windows. That is addressed separately in [0010](0010-parallel-connect-for-owned-http-clients.md).
