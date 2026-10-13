@@ -24,20 +24,23 @@
 
 ## Why this exists
 
-If you run models on your own hardware, you can already call them from .NET: the official OpenAI SDK and Microsoft.Extensions.AI handle generic chat, and OllamaSharp covers Ollama. EmberLlm focuses on the parts that are specific to local inference.
+You can already reach a local server from .NET without EmberLlm: point the official OpenAI SDK at `http://127.0.0.1:1234/v1` and wrap it with Microsoft's `AsIChatClient()` adapter. For basic chat that works well. EmberLlm exists for what that setup gets wrong or can't do with local servers. These differences were measured side by side against LM Studio ([spike 0001](docs/spikes/0001-comparison-with-openai-sdk.md)):
 
-Already in place:
+| | EmberLlm | OpenAI SDK + adapter |
+| --- | --- | --- |
+| Find running servers and identify the backend | `EmberLlmDiscovery.FindAsync()` | Not available |
+| `ChatOptions.TopK`, extra fields in `AdditionalProperties` | Sent to the server | **Silently dropped** |
+| Options chat completions can't honor (e.g. `ConversationId`) | `NotSupportedException` before anything is sent | **Silently ignored** |
+| A slow local model writing for over 100 seconds | Waits (10-minute default timeout) | Cut off at 100 s and **re-sent**, up to 3 times |
+| Server not running | `EmberLlmConnectionException` in ~2 s | `AggregateException` after 4 retries, ~8 s |
+| No model name given | Uses the first model the server lists | Can't create the client |
+| Server answers with a different model than requested | Visible in `ModelId`; `StrictModelMatching` makes it throw | Not detectable |
 
-- **Reasoning stays separate.** Thinking models' reasoning arrives as `TextReasoningContent`, not mixed into the answer text.
-- **Finds running servers.** Discovery probes the default ports of LM Studio, Ollama, llama.cpp and vLLM, confirms each server and identifies which backend it is.
-- **No model name required.** If you don't name one, EmberLlm uses your configured default, then the first model the server lists.
-- **Clear errors for local setups.** "Server not running", "server returned an error" (with the server's own message) and "request timed out" are separate exception types.
-- **Timeouts suited to slow hardware.** The default request timeout is 10 minutes, and it is kept distinct from your own cancellation.
-- **Never fails silently.** Every option you set is either sent or rejected before the request goes out, and every response field is either mapped or kept in `AdditionalProperties`. See [SPEC.md, Design rules](SPEC.md#design-rules).
+The principle behind most of these rows: **EmberLlm never fails silently.** Every option you set is either sent or rejected before the request goes out, and every response field is either mapped or kept in `AdditionalProperties` ([SPEC.md, Design rules](SPEC.md#design-rules)).
 
-Planned for v0.1: getting typed objects back from small models that wrap JSON in code fences or `<think>` blocks. A comparison with the OpenAI SDK plus Microsoft's adapter is scheduled before that work, and this section will be updated with its findings.
+Both setups keep reasoning from thinking models separate from the answer, and both report token usage when streaming. Microsoft.Extensions.AI's `GetResponseAsync<T>` works through EmberLlm too, because `EmberLlmClient` *is* an `IChatClient`. With JSON schema mode it parsed about 9 replies in 10 from a small model. The planned `GetAsync<T>` (milestone 6) builds on it, adding retries and a fallback for servers that can't enforce a schema.
 
-EmberLlm complements those libraries rather than replacing them. `EmberLlmClient` *is* an `IChatClient` and uses Microsoft.Extensions.AI's message types, so it drops into that ecosystem without conversion code.
+EmberLlm complements those libraries rather than replacing them, and drops into the Microsoft.Extensions.AI ecosystem without conversion code.
 
 ## Quick start
 
@@ -155,7 +158,7 @@ These are **not available yet**. Names may change before they ship.
 
 | Feature | Planned API | Milestone |
 | --- | --- | --- |
-| Typed structured output | `GetAsync<T>()` cleans small-model output, deserializes into your type, and retries on failure | 6 |
+| Typed structured output | `GetAsync<T>()` builds on Microsoft.Extensions.AI's `GetResponseAsync<T>`, adding corrective retries, a prompt-based fallback for servers that can't enforce a JSON schema, and cleanup of `<think>` blocks and code fences | 6 |
 | Dependency injection | `services.AddEmberLlm(...)` registers `EmberLlmClient` and `IChatClient` | 7 |
 | NuGet package | `dotnet add package EmberLlm` | 8 (v0.1.0 release) |
 
