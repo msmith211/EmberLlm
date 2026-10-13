@@ -40,6 +40,24 @@ public class ClientIntegrationTests
     }
 
     [Fact]
+    public async Task Discovery_FindsTheServer()
+    {
+        var url = LocalServer.RequireUrl();
+        var options = new DiscoveryOptions();
+        options.Endpoints.Clear();
+        options.Endpoints.Add(url);
+
+        var result = await EmberLlmDiscovery.FindAsync(options, TestContext.Current.CancellationToken);
+
+        var server = Assert.Single(result);
+        Assert.NotEmpty(server.Models);
+        Assert.Empty(result.Skipped);
+
+        // Report what it was identified as, so a wrong identification is easy to spot in the test log
+        TestContext.Current.SendDiagnosticMessage($"Discovered: {server}");
+    }
+
+    [Fact]
     public async Task Streaming_EndsWithUsage()
     {
         using var client = new EmberLlmClient(LocalServer.RequireUrl().ToString());
