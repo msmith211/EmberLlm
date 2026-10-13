@@ -37,7 +37,8 @@ Target .NET 10 (`net10.0`, current LTS) with nullable reference types and warnin
 
 Runtime dependencies (the complete list; ask before adding anything else):
 
-- `System.Text.Json` (in-box), including the built-in `JsonSchemaExporter` for schema generation
+- `System.Text.Json` (in-box)
+- `Microsoft.Extensions.AI` (milestone 6, pending approval: provides `GetResponseAsync<T>`, which `GetAsync<T>` builds on; see [0011](docs/decisions/0011-structured-output-builds-on-meai.md))
 - `Microsoft.Extensions.AI.Abstractions`
 - `Microsoft.Extensions.DependencyInjection.Abstractions` (for `AddEmberLlm()`)
 - `Microsoft.Extensions.Http` (for `IHttpClientFactory` registration)
@@ -197,13 +198,15 @@ Document in the README that on Ollama, `/v1/models` lists every installed model,
 
 ### Structured output (`GetAsync<T>`)
 
-1. Generate a JSON schema from `T` with `JsonSchemaExporter`.
-2. If the backend's capability table entry says it supports `response_format: json_schema`, send the schema there. Otherwise (including `BackendType.Generic`) inject the schema into the system prompt with an instruction to reply with JSON only.
-3. Clean the raw text before parsing:
+`GetAsync<T>` is a thin layer over Microsoft.Extensions.AI's `GetResponseAsync<T>`, which already generates the schema, sends it as `response_format: json_schema` and deserializes the reply ([0011](docs/decisions/0011-structured-output-builds-on-meai.md), based on [spike 0001](docs/spikes/0001-comparison-with-openai-sdk.md)). EmberLlm adds what that lacks: retries, a fallback for servers without schema support, and cleanup. This needs the `Microsoft.Extensions.AI` package as a runtime dependency, pending approval.
+
+1. Schema generation and the JSON schema request come from `GetResponseAsync<T>`.
+2. If the backend's capability table entry says it supports `response_format: json_schema`, use JSON schema mode. Otherwise (including `BackendType.Generic`) inject the schema into the system prompt with an instruction to reply with JSON only. Never send `json_object` as a fallback: LM Studio rejects it with HTTP 400.
+3. In the prompt fallback, clean the raw text before parsing:
    - Strip reasoning blocks (`<think>…</think>`, including an unterminated block at the start) and ignore any separate `reasoning_content` field.
    - Strip a surrounding markdown code fence (` ```json … ``` ` or bare ` ``` `).
    - Trim whitespace; if text remains outside the outermost `{…}` or `[…]`, take the outermost JSON value.
-4. Validate by strict deserialization: `System.Text.Json` with `RespectNullableAnnotations` and `RespectRequiredConstructorParameters` enabled, so missing or null non-nullable members fail. Full JSON Schema validation is out of scope for v0.1.
+4. Validate by strict deserialization: `System.Text.Json` with `RespectNullableAnnotations` and `RespectRequiredConstructorParameters` enabled, so missing or null non-nullable members fail (whether these pass through Microsoft's deserializer or replace its defaults is settled in milestone 6). Full JSON Schema validation is out of scope for v0.1.
 5. On failure, append the model's raw reply and the parse error to the conversation and ask again. `MaxStructuredRetries` (default 2) counts retries after the first attempt, so the default allows **3 attempts in total**.
 6. If every attempt fails, throw `StructuredOutputException` containing the raw text of the last attempt and the parse error of each attempt.
 
@@ -275,8 +278,8 @@ Build in this order, one milestone per session or PR. Each milestone ends with p
 4. **Models.** `ListModelsAsync` with typed `ModelInfo`. Done when fixtures from at least LM Studio and Ollama parse. (LM Studio fixtures are recorded; the Ollama fixture test is in place but skipped until a real Ollama response is recorded.)
 5. **Discovery.** Parallel probing and fingerprinting per the table above. Done when fixture-based unit tests identify each backend, reject a non-LLM server on port 8000/8080, and return empty when nothing answers. Verifying against a running LM Studio is a manual check, not a CI test.
 
-   **5b. Comparison spike.** A time-boxed experiment, not library code: compare EmberLlm with the obvious alternative, the official OpenAI SDK plus Microsoft's adapter pointed at a local server, using LM Studio and a small thinking model. Check at least: whether reasoning content survives, whether a model name is required, what errors look like when the server is down or the model is missing, and how Microsoft.Extensions.AI's own `GetResponseAsync<T>` copes with small-model output (code fences, `<think>` blocks, missing fields, retries). Throwaway code lives in `spikes/`; findings go in `docs/spikes/`. Done when the findings are written up, milestone 6's scope is confirmed or narrowed, and the README's "why this exists" section is revised so every claim is backed by the findings.
-6. **Structured output.** Schema generation, `response_format` vs prompt fallback, output cleanup, strict deserialization, retry loop. Done when tests prove a malformed first response triggers exactly one corrective retry, a `<think>`-prefixed or fenced response parses on the first attempt, and exhausting retries throws with all attempt errors.
+   **5b. Comparison spike.** *(Done: [spike 0001](docs/spikes/0001-comparison-with-openai-sdk.md); milestone 6 narrowed by [0011](docs/decisions/0011-structured-output-builds-on-meai.md).)* A time-boxed experiment, not library code: compare EmberLlm with the obvious alternative, the official OpenAI SDK plus Microsoft's adapter pointed at a local server, using LM Studio and a small thinking model. Check at least: whether reasoning content survives, whether a model name is required, what errors look like when the server is down or the model is missing, and how Microsoft.Extensions.AI's own `GetResponseAsync<T>` copes with small-model output (code fences, `<think>` blocks, missing fields, retries). Throwaway code lives in `spikes/`; findings go in `docs/spikes/`. Done when the findings are written up, milestone 6's scope is confirmed or narrowed, and the README's "why this exists" section is revised so every claim is backed by the findings.
+6. **Structured output.** `GetAsync<T>` over Microsoft.Extensions.AI's `GetResponseAsync<T>` ([0011](docs/decisions/0011-structured-output-builds-on-meai.md)): corrective retry loop, backend-aware choice between JSON schema mode and prompt fallback (never `json_object`), cleanup in the fallback path, strict deserialization. Starts once the `Microsoft.Extensions.AI` dependency is approved. Done when tests prove a malformed first response triggers exactly one corrective retry, a `<think>`-prefixed or fenced response parses on the first attempt, and exhausting retries throws with all attempt errors.
 7. **Dependency injection.** `AddEmberLlm()`, registering `EmberLlmClient` and `IChatClient` through `IHttpClientFactory`. (`AsChatClient()` is no longer needed; see 3b.) Done when the sample app resolves `IChatClient` from DI and chats through it.
 8. **Release prep.** README meeting every requirement in Documentation and repo standards (quick start, GIF, live badges, status note, decision-note links), samples, package metadata (description, tags, icon, repository URL), SourceLink, `CHANGELOG.md` entry for 0.1.0, decision notes complete, a tagged release workflow that publishes to NuGet and creates a GitHub release from the changelog. **Requires Michael:** create the NuGet API key or configure trusted publishing and add it to the GitHub repo secrets; record the GIF. Done when `v0.1.0` installs from NuGet and the GitHub release page is up.
 

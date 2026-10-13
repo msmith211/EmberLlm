@@ -14,6 +14,7 @@ Short records of significant design choices: what was decided, why, and what els
 | [0008](0008-model-substitution-and-strict-matching.md) | Report model substitution, with opt-in strict matching | Accepted |
 | [0009](0009-discovery-design.md) | Discovery: confirm with /v1/models, identify by content, report what was skipped | Accepted |
 | [0010](0010-parallel-connect-for-owned-http-clients.md) | Connect to all of a host's addresses at once in EmberLlm-owned HttpClients | Accepted |
+| [0011](0011-structured-output-builds-on-meai.md) | Build GetAsync&lt;T&gt; on Microsoft.Extensions.AI's GetResponseAsync&lt;T&gt; | Accepted (dependency pending approval) |
 
 ## Writing a new note
 
