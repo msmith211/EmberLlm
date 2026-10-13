@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using EmberLlm.Chat;
+using EmberLlm.Http;
 using EmberLlm.Models;
 
 namespace EmberLlm;
@@ -30,7 +31,7 @@ public static class EmberLlmDiscovery
     /// <returns>The servers found, plus endpoints that answered but weren't usable.</returns>
     public static async Task<DiscoveryResult> FindAsync(DiscoveryOptions? options = null, CancellationToken cancellationToken = default)
     {
-        using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        using var http = OwnedHttpClient.Create();
         return await FindAsync(http, options, cancellationToken).ConfigureAwait(false);
     }
 

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using EmberLlm.Chat;
+using EmberLlm.Http;
 using EmberLlm.Models;
 using Microsoft.Extensions.AI;
 
@@ -88,7 +89,7 @@ public sealed class EmberLlmClient : IChatClient
         _metadata = new ChatClientMetadata(providerName: "EmberLlm", providerUri: apiBase, defaultModelId: _defaultModel);
 
         _ownsHttpClient = httpClient is null;
-        _http = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        _http = httpClient ?? OwnedHttpClient.Create();
     }
 
     /// <summary>
