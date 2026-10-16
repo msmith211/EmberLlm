@@ -94,6 +94,6 @@ dotnet_naming_rule.types_and_members_pascal.severity = suggestion
 # Library code: always ConfigureAwait(false)
 dotnet_diagnostic.CA2007.severity = warning
 
-# Tests: xUnit runs without a synchronization context, so ConfigureAwait is noise there
-[tests/**/*.cs]
+# Tests and samples: no synchronization context (xUnit, console apps), so ConfigureAwait is noise there
+[{tests,samples}/**/*.cs]
 dotnet_diagnostic.CA2007.severity = none

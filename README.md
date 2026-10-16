@@ -3,13 +3,12 @@
 **A .NET client for local LLM servers (LM Studio, Ollama, llama.cpp, vLLM), built on Microsoft.Extensions.AI.**
 
 [![CI](https://github.com/msmith211/EmberLlm/actions/workflows/ci.yml/badge.svg)](https://github.com/msmith211/EmberLlm/actions/workflows/ci.yml)
-[![NuGet](https://img.shields.io/nuget/v/EmberLlm.svg)](https://www.nuget.org/packages/EmberLlm)
-[![Coverage](https://img.shields.io/badge/coverage-pending-lightgrey.svg)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!NOTE]
-> **Status: pre-release.** v0.1 is in development and not yet on NuGet. Chat, streaming, model listing and server discovery work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output and dependency injection are still being built (see [Coming next](#coming-next)). The API may change before 1.0.
+> **Status: pre-release.** v0.1 is in development and not yet on NuGet. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output is still being built (see [Coming next](#coming-next)). The API may change before 1.0.
 
+<!-- TODO (milestone 8): add NuGet and coverage badges once the package is published and coverage is reported. -->
 <!-- TODO (milestone 8): terminal GIF of discovery + streaming goes here. -->
 
 ## Contents
@@ -73,7 +72,7 @@ await foreach (string token in llm.StreamAsync("Write a haiku about garbage coll
 ```
 
 > [!TIP]
-> `localhost` works too: EmberLlm connects to IPv4 and IPv6 at the same time. If you pass in your own `HttpClient`, prefer `127.0.0.1`: by default .NET tries IPv6 (`::1`) first, and many local servers, LM Studio included, listen only on IPv4, so on Windows the first request waits about 2 seconds ([decision 0010](docs/decisions/0010-parallel-connect-for-owned-http-clients.md)).
+> `localhost` works too: EmberLlm connects to IPv4 and IPv6 at the same time, including through `AddEmberLlm`. If you pass in your own `HttpClient`, prefer `127.0.0.1`: by default .NET tries IPv6 (`::1`) first, and many local servers, LM Studio included, listen only on IPv4, so on Windows the first request waits about 2 seconds ([decision 0010](docs/decisions/0010-parallel-connect-for-owned-http-clients.md)).
 
 ### Find a running server
 
@@ -117,6 +116,21 @@ foreach (var reasoning in reply.Messages.SelectMany(m => m.Contents).OfType<Text
 Console.WriteLine($"Answered by {reply.ModelId} using {reply.Usage?.OutputTokenCount} output tokens");
 ```
 
+### Register with dependency injection
+
+```csharp
+using EmberLlm;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+
+services.AddEmberLlm(o => o.BaseUrl = "http://127.0.0.1:1234");
+
+// Later, anywhere IChatClient or EmberLlmClient is injected
+IChatClient chat = provider.GetRequiredService<IChatClient>();
+```
+
+`AddEmberLlm` registers one `EmberLlmClient`, also resolvable as `IChatClient`, that gets its `HttpClient` from `IHttpClientFactory`. It returns the `IHttpClientBuilder`, so you can add your own handlers ([decision 0012](docs/decisions/0012-register-a-singleton-client-with-addemberllm.md)). [samples/QuickStart](samples/QuickStart/Program.cs) is a complete console app.
+
 ### List models and handle errors
 
 ```csharp
@@ -148,6 +162,7 @@ catch (EmberLlmHttpException ex)
 | Discovery | `EmberLlmDiscovery.FindAsync()` probes default ports (and any endpoints you add) in parallel, confirms each server with `/v1/models`, identifies the backend from response content, and reports unusable endpoints in `Skipped` ([decision 0009](docs/decisions/0009-discovery-design.md)). |
 | Errors | `EmberLlmHttpException` (status code and the server's message), `EmberLlmConnectionException`, `EmberLlmTimeoutException`, `NoModelAvailableException` and `ModelMismatchException`, all deriving from `EmberLlmException` ([decision 0003](docs/decisions/0003-exception-model.md)). |
 | Strict model matching | Opt-in `EmberLlmOptions.StrictModelMatching` throws when a server answers with a different model than requested ([decision 0008](docs/decisions/0008-model-substitution-and-strict-matching.md)). |
+| Dependency injection | `services.AddEmberLlm(...)` registers a singleton `EmberLlmClient` and `IChatClient` through `IHttpClientFactory`, with no `HttpClient` timeout of its own and fast `localhost` connections ([decision 0012](docs/decisions/0012-register-a-singleton-client-with-addemberllm.md)). |
 | Interop | `GetService` returns `ChatClientMetadata`, so Microsoft.Extensions.AI middleware and libraries built on `IChatClient` work unchanged. |
 
 Unit tests run on Linux and Windows in CI. Integration tests are opt-in and have passed against LM Studio with gemma-4-12b and qwen3-4b-thinking. See [CHANGELOG.md](CHANGELOG.md) for the full list.
@@ -159,7 +174,6 @@ These are **not available yet**. Names may change before they ship.
 | Feature | Planned API | Milestone |
 | --- | --- | --- |
 | Typed structured output | `GetAsync<T>()` builds on Microsoft.Extensions.AI's `GetResponseAsync<T>`, adding corrective retries, a prompt-based fallback for servers that can't enforce a JSON schema, and cleanup of `<think>` blocks and code fences | 6 |
-| Dependency injection | `services.AddEmberLlm(...)` registers `EmberLlmClient` and `IChatClient` | 7 |
 | NuGet package | `dotnet add package EmberLlm` | 8 (v0.1.0 release) |
 
 Tool calling and loading or unloading models are planned for v0.2. See [ROADMAP.md](ROADMAP.md) for what is planned and what is out of scope.

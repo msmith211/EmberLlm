@@ -48,7 +48,7 @@ Test-only packages may be added without asking: xUnit v3 (its `Assert.Skip` hand
 Other constraints:
 
 - Async everywhere, every public async method takes a `CancellationToken`
-- Accept an injected `HttpClient`; ship an `AddEmberLlm()` extension for `IServiceCollection` that registers a typed client through `IHttpClientFactory`
+- Accept an injected `HttpClient`; ship an `AddEmberLlm()` extension for `IServiceCollection` that registers a singleton `EmberLlmClient` whose `HttpClient` comes from `IHttpClientFactory` ([0012](docs/decisions/0012-register-a-singleton-client-with-addemberllm.md))
 - `HttpClient` ownership: a client the caller passes in is never disposed by the library. When the library creates its own (URL-only constructor, discovery without an injected client), it owns and disposes it, and `EmberLlmClient` implements `IDisposable`
 - Connections: library-created `HttpClient`s connect to all of a host's addresses at once and keep the first that succeeds, so `localhost` is as fast as `127.0.0.1` ([0010](docs/decisions/0010-parallel-connect-for-owned-http-clients.md)). Injected `HttpClient`s are not changed
 - Timeouts: library-created `HttpClient`s use `Timeout = Infinite`. Requests are bounded by `EmberLlmOptions.RequestTimeout` (default 10 minutes, since local generation can be slow) applied through a linked `CancellationTokenSource`. A timeout throws `EmberLlmTimeoutException`, distinct from caller cancellation (`OperationCanceledException`)
