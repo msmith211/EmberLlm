@@ -20,6 +20,21 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/msmith211/EmberLlm</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/msmith211/EmberLlm</PackageProjectUrl>
+    <PackageReleaseNotes>https://github.com/msmith211/EmberLlm/blob/main/CHANGELOG.md</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <!-- Packaging. The release workflow sets Version from the git tag; this is the fallback for local builds.
+       Only the library opts in to packing; tests, samples and spikes never produce a package. -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>dev</VersionSuffix>
+    <IsPackable>false</IsPackable>
+    <!-- SourceLink is built into the .NET SDK: stamp the commit, publish the repo URL, ship symbols as .snupkg -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
 </Project>

@@ -3,11 +3,18 @@
   <PropertyGroup>
     <RootNamespace>EmberLlm</RootNamespace>
     <PackageId>EmberLlm</PackageId>
-    <Description>Make local LLM servers (LM Studio, Ollama, llama.cpp, vLLM) feel native in .NET: server discovery, streaming chat, and typed structured output.</Description>
+    <Description>A .NET client for local LLM servers (LM Studio, Ollama, llama.cpp, vLLM), built on Microsoft.Extensions.AI: server discovery, streaming chat with separate reasoning, and errors and timeouts suited to local hardware.</Description>
     <PackageTags>llm;local-llm;ollama;lm-studio;llama.cpp;vllm;openai;ai;microsoft-extensions-ai</PackageTags>
     <!-- Missing XML docs on public members (CS1591) fail the build via TreatWarningsAsErrors -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <!-- nuget.org can't resolve the repo README's relative links, so the package has its own -->
+  <ItemGroup>
+    <None Include="PackageReadme.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
