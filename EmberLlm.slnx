@@ -2,6 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/EmberLlm/EmberLlm.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/QuickStart/QuickStart.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EmberLlm.IntegrationTests/EmberLlm.IntegrationTests.csproj" />
     <Project Path="tests/EmberLlm.Tests/EmberLlm.Tests.csproj" />
