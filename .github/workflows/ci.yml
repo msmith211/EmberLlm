@@ -41,6 +41,11 @@ jobs:
       - name: Test
         run: dotnet test --solution EmberLlm.slnx -c Release --no-build
 
+      # Catches packaging mistakes before a release tag does
+      - name: Pack
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet pack EmberLlm.slnx -c Release --no-build -o packages
+
       - name: Coverage
         if: matrix.os == 'ubuntu-latest'
         run: dotnet test --project tests/EmberLlm.Tests -c Release --no-build --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
