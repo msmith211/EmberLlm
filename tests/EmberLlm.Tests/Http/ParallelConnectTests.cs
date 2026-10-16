@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using EmberLlm.Http;
+using EmberLlm.Tests.Fakes;
 
 namespace EmberLlm.Tests.Http;
 
@@ -18,7 +19,7 @@ public class ParallelConnectTests
     [Fact]
     public async Task Localhost_ReachesIpv4OnlyServer_Quickly()
     {
-        using var listener = StartIpv4Listener(out var port);
+        using var listener = LoopbackServer.StartIpv4(out var port);
         var accept = listener.AcceptSocketAsync(TestContext.Current.CancellationToken);
 
         var stopwatch = Stopwatch.StartNew();
@@ -32,8 +33,8 @@ public class ParallelConnectTests
     [Fact]
     public async Task OwnedHttpClient_GetsAResponse_ViaLocalhost()
     {
-        using var listener = StartIpv4Listener(out var port);
-        var server = ServeOneResponseAsync(listener, "{\"ok\":true}", TestContext.Current.CancellationToken);
+        using var listener = LoopbackServer.StartIpv4(out var port);
+        var server = LoopbackServer.ServeOneResponseAsync(listener, "{\"ok\":true}", TestContext.Current.CancellationToken);
         using var http = OwnedHttpClient.Create();
 
         var stopwatch = Stopwatch.StartNew();
@@ -48,7 +49,7 @@ public class ParallelConnectTests
     [Fact]
     public async Task IpLiteral_ConnectsDirectly()
     {
-        using var listener = StartIpv4Listener(out var port);
+        using var listener = LoopbackServer.StartIpv4(out var port);
         var accept = listener.AcceptSocketAsync(TestContext.Current.CancellationToken);
 
         await using var stream = await OwnedHttpClient.ConnectAsync(new DnsEndPoint("127.0.0.1", port), TestContext.Current.CancellationToken);
@@ -62,7 +63,7 @@ public class ParallelConnectTests
     {
         // Find a free port, then close it so nothing listens there
         int port;
-        using (var probe = StartIpv4Listener(out port))
+        using (var probe = LoopbackServer.StartIpv4(out port))
         {
         }
 
@@ -73,35 +74,9 @@ public class ParallelConnectTests
     [Fact]
     public async Task CallerCancellation_Throws()
     {
-        using var listener = StartIpv4Listener(out var port);
+        using var listener = LoopbackServer.StartIpv4(out var port);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await OwnedHttpClient.ConnectAsync(new DnsEndPoint("localhost", port), new CancellationToken(canceled: true)));
-    }
-
-    private static DisposableListener StartIpv4Listener(out int port)
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        return new DisposableListener(listener);
-    }
-
-    private static async Task ServeOneResponseAsync(DisposableListener listener, string json, CancellationToken cancellationToken)
-    {
-        using var socket = await listener.AcceptSocketAsync(cancellationToken);
-        await using var stream = new NetworkStream(socket);
-        var buffer = new byte[4096];
-        _ = await stream.ReadAsync(buffer, cancellationToken);
-
-        var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(json)}\r\nConnection: close\r\n\r\n{json}";
-        await stream.WriteAsync(Encoding.UTF8.GetBytes(response), cancellationToken);
-    }
-
-    private sealed class DisposableListener(TcpListener listener) : IDisposable
-    {
-        public ValueTask<Socket> AcceptSocketAsync(CancellationToken cancellationToken) => listener.AcceptSocketAsync(cancellationToken);
-
-        public void Dispose() => listener.Stop();
     }
 }
