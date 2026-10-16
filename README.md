@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!NOTE]
-> **Status: pre-release.** v0.1 is in development and not yet on NuGet. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output is still being built (see [Coming next](#coming-next)). The API may change before 1.0.
+> **Status: beta.** `0.1.0-beta.1` is on NuGet as a pre-release. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output is still being built (see [Coming next](#coming-next)). The API may change before 1.0.
 
 <!-- TODO (milestone 8): add NuGet and coverage badges once the package is published and coverage is reported. -->
 <!-- TODO (milestone 8): terminal GIF of discovery + streaming goes here. -->
@@ -45,12 +45,10 @@ EmberLlm complements those libraries rather than replacing them, and drops into 
 
 ### Install
 
-EmberLlm is not on NuGet yet; `dotnet add package EmberLlm` will work once v0.1.0 is published. Until then, reference it from source (requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)):
+EmberLlm targets .NET 10 ([SDK download](https://dotnet.microsoft.com/download/dotnet/10.0)). It's a pre-release, so include `--prerelease`:
 
 ```bash
-git clone https://github.com/msmith211/EmberLlm.git
-cd path/to/YourApp
-dotnet add reference path/to/EmberLlm/src/EmberLlm/EmberLlm.csproj
+dotnet add package EmberLlm --prerelease
 ```
 
 ### Chat and stream
@@ -174,7 +172,7 @@ These are **not available yet**. Names may change before they ship.
 | Feature | Planned API | Milestone |
 | --- | --- | --- |
 | Typed structured output | `GetAsync<T>()` builds on Microsoft.Extensions.AI's `GetResponseAsync<T>`, adding corrective retries, a prompt-based fallback for servers that can't enforce a JSON schema, and cleanup of `<think>` blocks and code fences | 6 |
-| NuGet package | `dotnet add package EmberLlm` | 8 (v0.1.0 release) |
+| Stable NuGet release | `dotnet add package EmberLlm` without `--prerelease` | 8 (v0.1.0 release) |
 
 Tool calling and loading or unloading models are planned for v0.2. See [ROADMAP.md](ROADMAP.md) for what is planned and what is out of scope.
 

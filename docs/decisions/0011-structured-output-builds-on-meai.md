@@ -1,6 +1,6 @@
 # 0011. Build GetAsync<T> on Microsoft.Extensions.AI's GetResponseAsync<T>
 
-- Status: Accepted (Michael, 2026-10-13). Adding the `Microsoft.Extensions.AI` package as a runtime dependency still needs approval before milestone 6 starts.
+- Status: Accepted (Michael, 2026-10-13). The `Microsoft.Extensions.AI` runtime dependency was approved by Michael on 2026-10-16.
 - Date: 2026-10-13
 
 ## Context
