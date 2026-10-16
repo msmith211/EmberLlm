@@ -1,4 +1,4 @@
-# 0011. Register a singleton EmberLlmClient with AddEmberLlm, not a transient typed client
+# 0012. Register a singleton EmberLlmClient with AddEmberLlm, not a transient typed client
 
 - Status: Accepted (Michael, 2026-10-16)
 - Date: 2026-10-16

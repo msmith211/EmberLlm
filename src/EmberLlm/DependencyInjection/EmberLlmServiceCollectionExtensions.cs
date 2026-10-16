@@ -42,7 +42,7 @@ public static class EmberLlmServiceCollectionExtensions
 
         services.Configure(configure);
 
-        // A singleton, not a transient typed client: see decision 0011
+        // A singleton, not a transient typed client: see decision 0012
         services.TryAddSingleton(static provider => new EmberLlmClient(
             provider.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName),
             provider.GetRequiredService<IOptions<EmberLlmOptions>>().Value));

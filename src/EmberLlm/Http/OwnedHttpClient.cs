@@ -5,7 +5,7 @@ namespace EmberLlm.Http;
 
 /// <summary>
 /// Creates the <see cref="HttpClient"/>s EmberLlm owns (decision 0010), and the primary handler <c>AddEmberLlm()</c>
-/// registers (decision 0011). An <see cref="HttpClient"/> the caller passes in is never changed.
+/// registers (decision 0012). An <see cref="HttpClient"/> the caller passes in is never changed.
 /// </summary>
 internal static class OwnedHttpClient
 {
