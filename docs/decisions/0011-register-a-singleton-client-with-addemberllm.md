@@ -1,6 +1,6 @@
 # 0011. Register a singleton EmberLlmClient with AddEmberLlm, not a transient typed client
 
-- Status: Proposed
+- Status: Accepted (Michael, 2026-10-16)
 - Date: 2026-10-16
 
 ## Context
@@ -10,7 +10,7 @@
 That fits EmberLlm poorly:
 
 - **`EmberLlmClient` caches the server's first listed model** when no model is named ([0002](0002-model-selection-order.md)). A new instance per resolution repeats the `/v1/models` request every time.
-- **It is `IDisposable`.** The container keeps every transient disposable it creates from the root provider until the provider is disposed, so a console app that resolves `IChatClient` in a loop grows without bound.
+- **It is `IDisposable`.** The container keeps every transient disposable it creates from the root provider until the provider is disposed, so a console app that resolves `IChatClient` in a loop grows without bound. Measured: 20,000 resolutions of a transient typed `EmberLlmClient` from the root provider kept 17.8 MB alive, with every sampled instance still reachable after a full GC; the singleton registration kept nothing.
 - **`IChatClient` is usually injected into long-lived services.** Microsoft.Extensions.AI's own `AddChatClient()` registers a singleton, and middleware pipelines are built once. A transient captured by a singleton keeps its `HttpClient` for good anyway, so the rotation that transient registration exists for doesn't happen.
 
 ## Decision
