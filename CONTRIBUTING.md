@@ -82,6 +82,22 @@ Work on a branch and open the pull request against `main`. Before you open it, c
 - [ ] User-visible changes have an entry under "Unreleased" in [CHANGELOG.md](CHANGELOG.md)
 - [ ] Significant design choices have a short decision note in [`docs/decisions/`](docs/decisions/) (`NNNN-title.md`: context, decision, alternatives considered, consequences). If a reviewer would ask "why did you do it this way?", it needs one.
 
+## Releasing (maintainers)
+
+Releases are published by [.github/workflows/release.yml](.github/workflows/release.yml) when a version tag is pushed.
+
+1. On a branch, move the `## [Unreleased]` entries into a new `## [x.y.z]` or `## [x.y.z-beta.n]` section with today's date, update the links at the bottom of `CHANGELOG.md`, and merge it into `main`.
+2. Tag the merge commit on `main` and push the tag:
+
+   ```sh
+   git tag v0.1.0-beta.1
+   git push origin v0.1.0-beta.1
+   ```
+
+3. The workflow checks that the tag is on `main` and that `CHANGELOG.md` has a section for the version, then builds, tests and packs with the tag's version. It pushes the package and symbols to NuGet and creates a GitHub release with that changelog section as its notes. A version with a suffix (`-beta.1`) is marked as a pre-release on both.
+
+One-time setup: on nuget.org, add a trusted publishing policy for repository `msmith211/EmberLlm` and workflow `release.yml`. In the GitHub repo, add a `release` environment and a `NUGET_USER` secret holding the nuget.org user name. NuGet never shows a version again once it's deleted, so a mistaken release is fixed by unlisting it and publishing the next version.
+
 ## Reporting bugs
 
 Open an issue using the bug-report template and include:

@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Nothing released yet. v0.1.0 is in development; see [ROADMAP.md](ROADMAP.md).
+## [0.1.0-beta.1] - 2026-10-16
+
+First public pre-release. Typed structured output (`GetAsync<T>()`) is still to come in v0.1.0; see [ROADMAP.md](ROADMAP.md). The API may change before 1.0.
 
 ### Added
 
@@ -29,4 +31,5 @@ Nothing released yet. v0.1.0 is in development; see [ROADMAP.md](ROADMAP.md).
 - Streaming: a server-sent event named `error` now throws even if its JSON has no `error` field, and other event names are kept in the update's `AdditionalProperties` as `sse.event` instead of being ignored.
 - Data is no longer dropped silently: unsupported or conflicting message data throws, and a response with more than one choice throws instead of being truncated. See [decision 0006](docs/decisions/0006-fix-silent-data-drops.md).
 
-[Unreleased]: https://github.com/msmith211/EmberLlm/commits/main
+[Unreleased]: https://github.com/msmith211/EmberLlm/compare/v0.1.0-beta.1...HEAD
+[0.1.0-beta.1]: https://github.com/msmith211/EmberLlm/releases/tag/v0.1.0-beta.1
