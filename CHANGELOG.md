@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-16
+
+First stable release. It includes everything in [0.1.0-beta.1](https://github.com/msmith211/EmberLlm/releases/tag/v0.1.0-beta.1), plus typed structured output. Until 1.0, minor versions may contain breaking changes.
+
 ### Added
 
 - Typed structured output: `GetAsync<T>()` returns the reply as a `T`, built on Microsoft.Extensions.AI's `GetResponseAsync<T>` (now a dependency). It adds:
@@ -42,5 +46,6 @@ First public pre-release. Typed structured output (`GetAsync<T>()`) is still to 
 - Streaming: a server-sent event named `error` now throws even if its JSON has no `error` field, and other event names are kept in the update's `AdditionalProperties` as `sse.event` instead of being ignored.
 - Data is no longer dropped silently: unsupported or conflicting message data throws, and a response with more than one choice throws instead of being truncated. See [decision 0006](docs/decisions/0006-fix-silent-data-drops.md).
 
-[Unreleased]: https://github.com/msmith211/EmberLlm/compare/v0.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/msmith211/EmberLlm/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/msmith211/EmberLlm/compare/v0.1.0-beta.1...v0.1.0
 [0.1.0-beta.1]: https://github.com/msmith211/EmberLlm/releases/tag/v0.1.0-beta.1

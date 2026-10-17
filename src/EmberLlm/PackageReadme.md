@@ -2,7 +2,7 @@
 
 A .NET client for local LLM servers (LM Studio, Ollama, llama.cpp, vLLM), built on Microsoft.Extensions.AI.
 
-> **Beta.** The API may change before 1.0.
+> Until 1.0, minor versions (0.2, 0.3) may include breaking changes.
 
 - **Finds running servers.** `EmberLlmDiscovery.FindAsync()` probes the default ports of LM Studio, Ollama, llama.cpp and vLLM and identifies the backend.
 - **Is an `IChatClient`.** Works anywhere Microsoft.Extensions.AI is used, including its middleware.

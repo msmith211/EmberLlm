@@ -49,7 +49,8 @@ jobs:
             exit 1
           fi
 
-      # Relative links in the changelog are made absolute, since release notes are shown outside the repo
+      # Relative links in the changelog are made absolute, since release notes are shown outside the repo.
+      # Targets containing ':' (absolute URLs) and anchors ('#...') are left as they are.
       - name: Extract release notes from CHANGELOG.md
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -60,7 +61,7 @@ jobs:
             found && /^\[[^]]+\]: / { exit }
             found { print }
           ' CHANGELOG.md \
-            | sed -E "s#\]\((\./)?([^):\#][^)]*)\)#](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/\2)#g" \
+            | sed -E "s#\]\((\./)?([^):\#][^):]*)\)#](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/\2)#g" \
             > release-notes.md
           if ! grep -q '[^[:space:]]' release-notes.md; then
             echo "::error::CHANGELOG.md has no '## [$VERSION]' section with content"
