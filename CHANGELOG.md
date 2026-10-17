@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Typed structured output: `GetAsync<T>()` returns the reply as a `T`, built on Microsoft.Extensions.AI's `GetResponseAsync<T>` (now a dependency). It adds:
+  - `EmberLlmOptions.StructuredOutputMode`: `JsonSchema` (default) sends `response_format: json_schema`, and `Prompt` puts the schema in the conversation for servers that can't enforce one. EmberLlm never sends `json_object`, which LM Studio rejects. A client created from a discovered server picks the mode from its backend.
+  - Cleanup of replies that aren't valid JSON: leading `<think>` blocks, code fences, and text around the JSON value.
+  - Strict deserialization: missing or null required members fail.
+  - Corrective retries (`EmberLlmOptions.MaxStructuredRetries`, default 2), which send the bad reply and the error back to the model.
+  - `StructuredOutputException` when every attempt fails, with each attempt's raw reply and error.
+
+  See [decision 0011](docs/decisions/0011-structured-output-builds-on-meai.md) and [decision 0013](docs/decisions/0013-structured-output-modes-cleanup-and-retries.md).
+
 ## [0.1.0-beta.1] - 2026-10-16
 
 First public pre-release. Typed structured output (`GetAsync<T>()`) is still to come in v0.1.0; see [ROADMAP.md](ROADMAP.md). The API may change before 1.0.

@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!NOTE]
-> **Status: beta.** `0.1.0-beta.1` is on NuGet as a pre-release. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output is still being built (see [Coming next](#coming-next)). The API may change before 1.0.
+> **Status: beta.** `0.1.0-beta.1` is on NuGet as a pre-release. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output (`GetAsync<T>()`) is on `main` and comes in the next pre-release. The API may change before 1.0.
 
 <!-- TODO (milestone 8): add NuGet and coverage badges once the package is published and coverage is reported. -->
 <!-- TODO (milestone 8): terminal GIF of discovery + streaming goes here. -->
@@ -37,7 +37,7 @@ You can already reach a local server from .NET without EmberLlm: point the offic
 
 The principle behind most of these rows: **EmberLlm never fails silently.** Every option you set is either sent or rejected before the request goes out, and every response field is either mapped or kept in `AdditionalProperties` ([SPEC.md, Design rules](SPEC.md#design-rules)).
 
-Both setups keep reasoning from thinking models separate from the answer, and both report token usage when streaming. Microsoft.Extensions.AI's `GetResponseAsync<T>` works through EmberLlm too, because `EmberLlmClient` *is* an `IChatClient`. With JSON schema mode it parsed about 9 replies in 10 from a small model. The planned `GetAsync<T>` (milestone 6) builds on it, adding retries and a fallback for servers that can't enforce a schema.
+Both setups keep reasoning from thinking models separate from the answer, and both report token usage when streaming. Microsoft.Extensions.AI's `GetResponseAsync<T>` works through EmberLlm too, because `EmberLlmClient` *is* an `IChatClient`. With JSON schema mode it parsed about 9 replies in 10 from a small model, with no retry for the rest and no working mode for servers that can't enforce a schema. EmberLlm's `GetAsync<T>` builds on it and adds both, plus cleanup of `<think>` blocks and code fences.
 
 EmberLlm complements those libraries rather than replacing them, and drops into the Microsoft.Extensions.AI ecosystem without conversion code.
 
@@ -71,6 +71,17 @@ await foreach (string token in llm.StreamAsync("Write a haiku about garbage coll
 
 > [!TIP]
 > `localhost` works too: EmberLlm connects to IPv4 and IPv6 at the same time, including through `AddEmberLlm`. If you pass in your own `HttpClient`, prefer `127.0.0.1`: by default .NET tries IPv6 (`::1`) first, and many local servers, LM Studio included, listen only on IPv4, so on Windows the first request waits about 2 seconds ([decision 0010](docs/decisions/0010-parallel-connect-for-owned-http-clients.md)).
+
+### Get typed results
+
+```csharp
+CodeReview review = await llm.GetAsync<CodeReview>("Review this method: int Div(int a, int b) => a / b;");
+Console.WriteLine($"{review.Severity}: {review.Summary}");
+
+public record CodeReview(string Summary, string[] Issues, int Severity);
+```
+
+The type's JSON schema is sent as `response_format: json_schema`. Set `EmberLlmOptions.StructuredOutputMode = StructuredOutputMode.Prompt` for servers that can't enforce a schema; a client created from a discovered server picks the mode itself. Deserialization is strict (missing or null required members fail), a reply that isn't valid JSON is cleaned first, and a reply that still can't be read goes back to the model with the error, up to `MaxStructuredRetries` times (default 2). If every attempt fails, `StructuredOutputException.Attempts` holds each reply and error ([decision 0013](docs/decisions/0013-structured-output-modes-cleanup-and-retries.md)).
 
 ### Find a running server
 
@@ -155,10 +166,11 @@ catch (EmberLlmHttpException ex)
 | Streaming | `GetStreamingResponseAsync` yields `ChatResponseUpdate`s, with usage in the final update. `StreamAsync(string)` yields just the reply text. |
 | Options | `ChatOptions` model, temperature, max output tokens, top-p, top-k, stop sequences, seed, frequency and presence penalties, instructions, reasoning effort and response format (text, JSON, JSON schema). `AdditionalProperties` pass through as extra request fields. |
 | Unsupported options | Options EmberLlm can't honor, such as tools (planned for v0.2), throw `NotSupportedException` before any request is made. |
+| Structured output | `GetAsync<T>()` returns a typed result over Microsoft.Extensions.AI's `GetResponseAsync<T>`, with JSON schema or prompt mode, cleanup of invalid replies, strict deserialization and corrective retries ([decision 0013](docs/decisions/0013-structured-output-modes-cleanup-and-retries.md)). |
 | Model selection | `ChatOptions.ModelId`, then `EmberLlmOptions.DefaultModel`, then the server's first listed model ([decision 0002](docs/decisions/0002-model-selection-order.md)). |
 | Model listing | `ListModelsAsync()` returns a `ModelList` of `ModelInfo` (id, owner, creation time, plus server-specific fields). |
 | Discovery | `EmberLlmDiscovery.FindAsync()` probes default ports (and any endpoints you add) in parallel, confirms each server with `/v1/models`, identifies the backend from response content, and reports unusable endpoints in `Skipped` ([decision 0009](docs/decisions/0009-discovery-design.md)). |
-| Errors | `EmberLlmHttpException` (status code and the server's message), `EmberLlmConnectionException`, `EmberLlmTimeoutException`, `NoModelAvailableException` and `ModelMismatchException`, all deriving from `EmberLlmException` ([decision 0003](docs/decisions/0003-exception-model.md)). |
+| Errors | `EmberLlmHttpException` (status code and the server's message), `EmberLlmConnectionException`, `EmberLlmTimeoutException`, `NoModelAvailableException`, `ModelMismatchException` and `StructuredOutputException`, all deriving from `EmberLlmException` ([decision 0003](docs/decisions/0003-exception-model.md)). |
 | Strict model matching | Opt-in `EmberLlmOptions.StrictModelMatching` throws when a server answers with a different model than requested ([decision 0008](docs/decisions/0008-model-substitution-and-strict-matching.md)). |
 | Dependency injection | `services.AddEmberLlm(...)` registers a singleton `EmberLlmClient` and `IChatClient` through `IHttpClientFactory`, with no `HttpClient` timeout of its own and fast `localhost` connections ([decision 0012](docs/decisions/0012-register-a-singleton-client-with-addemberllm.md)). |
 | Interop | `GetService` returns `ChatClientMetadata`, so Microsoft.Extensions.AI middleware and libraries built on `IChatClient` work unchanged. |
@@ -171,7 +183,6 @@ These are **not available yet**. Names may change before they ship.
 
 | Feature | Planned API | Milestone |
 | --- | --- | --- |
-| Typed structured output | `GetAsync<T>()` builds on Microsoft.Extensions.AI's `GetResponseAsync<T>`, adding corrective retries, a prompt-based fallback for servers that can't enforce a JSON schema, and cleanup of `<think>` blocks and code fences | 6 |
 | Stable NuGet release | `dotnet add package EmberLlm` without `--prerelease` | 8 (v0.1.0 release) |
 
 Tool calling and loading or unloading models are planned for v0.2. See [ROADMAP.md](ROADMAP.md) for what is planned and what is out of scope.
