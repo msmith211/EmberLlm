@@ -201,3 +201,52 @@ public class NoModelAvailableException : EmberLlmException
     {
     }
 }
+
+/// <summary>
+/// <see cref="EmberLlmClient.GetAsync{T}(string, CancellationToken)"/> got no reply it could read as the
+/// requested type, after every attempt. <see cref="Attempts"/> holds each reply and why it failed.
+/// </summary>
+public class StructuredOutputException : EmberLlmException
+{
+    /// <summary>Creates an exception with no message.</summary>
+    public StructuredOutputException()
+    {
+    }
+
+    /// <summary>Creates an exception with a message.</summary>
+    /// <param name="message">What went wrong.</param>
+    public StructuredOutputException(string message)
+        : base(message)
+    {
+    }
+
+    /// <summary>Creates an exception with a message and the exception that caused it.</summary>
+    /// <param name="message">What went wrong.</param>
+    /// <param name="innerException">The underlying failure.</param>
+    public StructuredOutputException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    /// <summary>Creates an exception describing failed attempts.</summary>
+    /// <param name="message">What went wrong.</param>
+    /// <param name="attempts">Each attempt's reply and error, in order.</param>
+    /// <param name="innerException">The last attempt's parse error.</param>
+    public StructuredOutputException(string message, IReadOnlyList<StructuredOutputAttempt> attempts, Exception innerException)
+        : base(message, innerException)
+    {
+        ArgumentNullException.ThrowIfNull(attempts);
+        Attempts = attempts;
+    }
+
+    /// <summary>Each attempt's raw reply and parse error, in the order they were made.</summary>
+    public IReadOnlyList<StructuredOutputAttempt> Attempts { get; } = [];
+
+    /// <summary>The raw text of the last attempt's reply, or <see langword="null"/> if no attempt was recorded.</summary>
+    public string? RawText => Attempts.Count == 0 ? null : Attempts[^1].RawText;
+}
+
+/// <summary>One <see cref="EmberLlmClient.GetAsync{T}(string, CancellationToken)"/> attempt that failed to parse.</summary>
+/// <param name="RawText">The reply text exactly as the server sent it, before any cleanup.</param>
+/// <param name="Error">Why the reply couldn't be read as the requested type.</param>
+public sealed record StructuredOutputAttempt(string RawText, string Error);

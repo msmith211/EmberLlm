@@ -2,10 +2,11 @@
 
 A .NET client for local LLM servers (LM Studio, Ollama, llama.cpp, vLLM), built on Microsoft.Extensions.AI.
 
-> **Beta.** The API may change before 1.0. Typed structured output (`GetAsync<T>()`) is still to come.
+> **Beta.** The API may change before 1.0.
 
 - **Finds running servers.** `EmberLlmDiscovery.FindAsync()` probes the default ports of LM Studio, Ollama, llama.cpp and vLLM and identifies the backend.
 - **Is an `IChatClient`.** Works anywhere Microsoft.Extensions.AI is used, including its middleware.
+- **Returns typed results.** `GetAsync<T>()` builds on Microsoft.Extensions.AI's `GetResponseAsync<T>`, adding cleanup of `<think>` blocks and code fences, strict parsing and corrective retries.
 - **Keeps reasoning separate.** Thinking models' reasoning arrives as `TextReasoningContent`, not mixed into the answer.
 - **Never fails silently.** Every option you set is sent or rejected before the request goes out.
 - **Suits local hardware.** No model name required, a 10-minute default timeout with no silent re-sends, and clear errors when the server isn't running.
@@ -22,6 +23,11 @@ Console.WriteLine(answer);
 
 await foreach (string token in llm.StreamAsync("Write a haiku about garbage collection."))
     Console.Write(token);
+
+// Typed results
+CodeReview review = await llm.GetAsync<CodeReview>("Review this method: int Div(int a, int b) => a / b;");
+
+public record CodeReview(string Summary, string[] Issues, int Severity);
 ```
 
 With dependency injection:

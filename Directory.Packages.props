@@ -7,6 +7,7 @@
 
   <!-- Runtime dependencies (the allowed list is in SPEC.md; each is added in the milestone that first uses it) -->
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />

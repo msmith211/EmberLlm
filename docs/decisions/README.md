@@ -16,6 +16,7 @@ Short records of significant design choices: what was decided, why, and what els
 | [0010](0010-parallel-connect-for-owned-http-clients.md) | Connect to all of a host's addresses at once in EmberLlm-owned HttpClients | Accepted |
 | [0011](0011-structured-output-builds-on-meai.md) | Build GetAsync&lt;T&gt; on Microsoft.Extensions.AI's GetResponseAsync&lt;T&gt; | Accepted |
 | [0012](0012-register-a-singleton-client-with-addemberllm.md) | Register a singleton EmberLlmClient with AddEmberLlm, not a transient typed client | Accepted |
+| [0013](0013-structured-output-modes-cleanup-and-retries.md) | Choose the structured-output mode per client, clean only invalid replies, retry only parse failures | Accepted |
 
 ## Writing a new note
 
