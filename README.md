@@ -9,8 +9,6 @@
 > [!NOTE]
 > **Status: beta.** `0.1.0-beta.1` is on NuGet as a pre-release. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output is still being built (see [Coming next](#coming-next)). The API may change before 1.0.
 
-<!-- TODO (milestone 8): terminal GIF of discovery + streaming goes here. -->
-
 ## Contents
 
 - [Why this exists](#why-this-exists)
