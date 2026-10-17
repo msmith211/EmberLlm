@@ -15,7 +15,7 @@ namespace EmberLlm;
 /// (LM Studio, Ollama, llama.cpp server, vLLM and others). It is a Microsoft.Extensions.AI
 /// <see cref="IChatClient"/>, so it works anywhere that interface is accepted.
 /// </summary>
-public sealed class EmberLlmClient : IChatClient
+public sealed partial class EmberLlmClient : IChatClient
 {
     private const int MaxBodyLengthInMessage = 500;
 
@@ -27,6 +27,8 @@ public sealed class EmberLlmClient : IChatClient
     private readonly TimeSpan _requestTimeout;
     private readonly ChatClientMetadata _metadata;
     private readonly bool _strictModelMatching;
+    private readonly StructuredOutputMode _structuredOutputMode;
+    private readonly int _maxStructuredRetries;
     private readonly SemaphoreSlim _modelLock = new(1, 1);
     private volatile string? _firstListedModel;
     private bool _disposed;
@@ -55,8 +57,13 @@ public sealed class EmberLlmClient : IChatClient
     /// The client creates and owns its own <see cref="HttpClient"/>.
     /// </summary>
     /// <param name="server">The discovered server.</param>
+    /// <remarks>
+    /// <see cref="EmberLlmOptions.StructuredOutputMode"/> follows the backend: <see cref="StructuredOutputMode.Prompt"/>
+    /// for a <see cref="BackendType.Generic"/> server, whose JSON schema support is unknown, and
+    /// <see cref="StructuredOutputMode.JsonSchema"/> for the known backends, which all support it.
+    /// </remarks>
     public EmberLlmClient(DiscoveredServer server)
-        : this(new EmberLlmOptions { BaseUrl = (server ?? throw new ArgumentNullException(nameof(server))).BaseUrl.ToString() })
+        : this(CreateOptions(server))
     {
     }
 
@@ -71,12 +78,32 @@ public sealed class EmberLlmClient : IChatClient
     {
     }
 
+    private static EmberLlmOptions CreateOptions(DiscoveredServer server)
+    {
+        ArgumentNullException.ThrowIfNull(server);
+        return new EmberLlmOptions
+        {
+            BaseUrl = server.BaseUrl.ToString(),
+            StructuredOutputMode = server.Backend == BackendType.Generic ? StructuredOutputMode.Prompt : StructuredOutputMode.JsonSchema,
+        };
+    }
+
     private EmberLlmClient(EmberLlmOptions options, HttpClient? httpClient)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (options.RequestTimeout <= TimeSpan.Zero && options.RequestTimeout != Timeout.InfiniteTimeSpan)
         {
             throw new ArgumentOutOfRangeException(nameof(options), options.RequestTimeout, "RequestTimeout must be positive or Timeout.InfiniteTimeSpan.");
+        }
+
+        if (options.MaxStructuredRetries < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.MaxStructuredRetries, "MaxStructuredRetries can't be negative.");
+        }
+
+        if (!Enum.IsDefined(options.StructuredOutputMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.StructuredOutputMode, "StructuredOutputMode is not a defined value.");
         }
 
         // Options are copied so later changes to the options object do not affect this client
@@ -86,6 +113,8 @@ public sealed class EmberLlmClient : IChatClient
         _defaultModel = string.IsNullOrWhiteSpace(options.DefaultModel) ? null : options.DefaultModel;
         _requestTimeout = options.RequestTimeout;
         _strictModelMatching = options.StrictModelMatching;
+        _structuredOutputMode = options.StructuredOutputMode;
+        _maxStructuredRetries = options.MaxStructuredRetries;
         _metadata = new ChatClientMetadata(providerName: "EmberLlm", providerUri: apiBase, defaultModelId: _defaultModel);
 
         _ownsHttpClient = httpClient is null;

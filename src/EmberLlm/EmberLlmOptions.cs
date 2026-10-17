@@ -37,4 +37,35 @@ public sealed class EmberLlmOptions
     /// requested name (for example <c>llama3</c> answered as <c>llama3:latest</c>) also throws.
     /// </summary>
     public bool StrictModelMatching { get; set; }
+
+    /// <summary>
+    /// How <see cref="EmberLlmClient.GetAsync{T}(string, CancellationToken)"/> asks the server for JSON.
+    /// Defaults to <see cref="StructuredOutputMode.JsonSchema"/>, which LM Studio, Ollama, llama.cpp and vLLM all support.
+    /// A client created from a <see cref="DiscoveredServer"/> picks the mode from the backend instead.
+    /// </summary>
+    public StructuredOutputMode StructuredOutputMode { get; set; } = StructuredOutputMode.JsonSchema;
+
+    /// <summary>
+    /// How many times <see cref="EmberLlmClient.GetAsync{T}(string, CancellationToken)"/> asks again when a reply
+    /// can't be read as the requested type, sending back the reply and the error. Defaults to 2, so 3 attempts in total.
+    /// 0 disables retries.
+    /// </summary>
+    public int MaxStructuredRetries { get; set; } = 2;
+}
+
+/// <summary>How <see cref="EmberLlmClient.GetAsync{T}(string, CancellationToken)"/> asks the server for JSON.</summary>
+public enum StructuredOutputMode
+{
+    /// <summary>
+    /// Send the type's JSON schema as <c>response_format: json_schema</c>, so the server constrains the reply to it.
+    /// Requires server support.
+    /// </summary>
+    JsonSchema,
+
+    /// <summary>
+    /// Put the type's JSON schema in the prompt and ask for JSON only, for servers without JSON schema support.
+    /// The server doesn't enforce the schema, so replies are cleaned before parsing (reasoning blocks, code fences,
+    /// surrounding text). EmberLlm never falls back to <c>response_format: json_object</c>, which LM Studio rejects.
+    /// </summary>
+    Prompt,
 }
