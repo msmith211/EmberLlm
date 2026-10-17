@@ -1,6 +1,6 @@
 # 0013. Choose the structured-output mode per client, clean only invalid replies, retry only parse failures
 
-- Status: Proposed
+- Status: Accepted (Michael, 2026-10-16)
 - Date: 2026-10-16
 
 ## Context
