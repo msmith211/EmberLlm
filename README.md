@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!NOTE]
-> **Status: beta.** `0.1.0-beta.1` is on NuGet as a pre-release. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output (`GetAsync<T>()`) is on `main` and comes in the next pre-release. The API may change before 1.0.
+> **Status: v0.1.0.** Chat, streaming, model listing, server discovery, typed structured output and dependency injection all work, with unit tests in CI and integration tests against a real LM Studio server. Until 1.0, minor versions (0.2, 0.3) may include breaking changes.
 
 ## Contents
 
@@ -43,10 +43,10 @@ EmberLlm complements those libraries rather than replacing them, and drops into 
 
 ### Install
 
-EmberLlm targets .NET 10 ([SDK download](https://dotnet.microsoft.com/download/dotnet/10.0)). It's a pre-release, so include `--prerelease`:
+EmberLlm targets .NET 10 ([SDK download](https://dotnet.microsoft.com/download/dotnet/10.0)):
 
 ```bash
-dotnet add package EmberLlm --prerelease
+dotnet add package EmberLlm
 ```
 
 ### Chat and stream
@@ -176,12 +176,6 @@ catch (EmberLlmHttpException ex)
 Unit tests run on Linux and Windows in CI. Integration tests are opt-in and have passed against LM Studio with gemma-4-12b and qwen3-4b-thinking. See [CHANGELOG.md](CHANGELOG.md) for the full list.
 
 ## Coming next
-
-These are **not available yet**. Names may change before they ship.
-
-| Feature | Planned API | Milestone |
-| --- | --- | --- |
-| Stable NuGet release | `dotnet add package EmberLlm` without `--prerelease` | 8 (v0.1.0 release) |
 
 Tool calling and loading or unloading models are planned for v0.2. See [ROADMAP.md](ROADMAP.md) for what is planned and what is out of scope.
 

@@ -4,7 +4,7 @@ EmberLlm aims to stay small and focused on what is specific to local inference. 
 
 Have an idea? Open an issue to discuss it before sending a pull request.
 
-## v0.1: first release (in progress)
+## v0.1: first release (released)
 
 - Chat completion: full responses, plain-text streaming, rich streaming with token usage
 - Model listing from `/v1/models`
