@@ -253,7 +253,7 @@ Unit tests run everywhere with no server; integration tests are opt-in and run a
 - A short "Status: v0.1, API may change" note
 - Supported backends table and a link to `docs/decisions/`
 
-**Badges:** CI status, NuGet version, license, code coverage.
+**Badges:** CI status, NuGet version, license. No coverage badge: CI publishes the coverage report as a build artifact instead.
 
 **History and workflow:**
 

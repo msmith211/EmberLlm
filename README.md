@@ -3,12 +3,12 @@
 **A .NET client for local LLM servers (LM Studio, Ollama, llama.cpp, vLLM), built on Microsoft.Extensions.AI.**
 
 [![CI](https://github.com/msmith211/EmberLlm/actions/workflows/ci.yml/badge.svg)](https://github.com/msmith211/EmberLlm/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/vpre/EmberLlm.svg)](https://www.nuget.org/packages/EmberLlm)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!NOTE]
 > **Status: beta.** `0.1.0-beta.1` is on NuGet as a pre-release. Chat, streaming, model listing, server discovery and dependency injection work today, with unit tests in CI and integration tests against a real LM Studio server. Typed structured output is still being built (see [Coming next](#coming-next)). The API may change before 1.0.
 
-<!-- TODO (milestone 8): add NuGet and coverage badges once the package is published and coverage is reported. -->
 <!-- TODO (milestone 8): terminal GIF of discovery + streaming goes here. -->
 
 ## Contents
